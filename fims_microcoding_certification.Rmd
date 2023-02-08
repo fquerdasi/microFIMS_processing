@@ -1,0 +1,516 @@
+---
+title: "fims_microcoding_certification"
+author: "Fran Querdasi"
+date: "2023-01-20"
+output: html_document
+---
+This script takes coder .txt files and consensus codes for microFIMS affect coding, and provides 3 outputs:
+1) "_agree" files: A set of .csv files (1 for each participant and parent/child combo) with dummy codes capturing whether each coder agreed (1) or disagreed (0) with the consensus code for that second. This file also has a relative time variable that indexes time (rounded to nearest integer) from start of the task. 
+2) "_summary" files: A set of .csv files (1 for each participant and parent/child combo) with the % agreement and kappa values for each coder, total across all codes and per code.
+3) "all_summary" file: A .csv file with % agreement and kappa values for each coder, total across all codes and per code, across all participants that they rated. 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+suppressPackageStartupMessages({
+  library(stringr)
+  library(stringi)
+  library(readxl) 
+  library(purrr)
+  library(lubridate)
+  library(irr) #for cohen's kappa
+  source("fims_microcoding_helper_functions.R")
+  library(reshape2)
+  library(tidyverse)
+})
+```
+
+## Input participant id and code type you want to generate codes for
+This is the start of functionality to only generate output files for a specific participant id or code type
+This will be put in the reliability script, but not this one
+```{r}
+# pid <- "074"
+# type <- "affect"
+```
+
+## Load data
+For certification, during Winter 2023 only affect codes will be tested, and only one interaction will be coded for each participant. 
+```{r}
+#get paths
+consensus_codes <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/MicroFIMS expert affect codes.xlsx"
+
+coders_codes <- "../../../../Lab/Video_coding/FIMS_Micro" #overall directory where all of the codes to be certified live
+
+#load data
+multiplesheets(consensus_codes, "cons_codes") #load the consensus codes as a list of dfs, each df is a id_parent or _child
+
+#get all of the .txt files from within the overall directory
+fl <- list.files(path=coders_codes, pattern = "*.txt", recursive=TRUE, full.names = TRUE) #this will output a list of the files
+
+#get a list of empty files from df to exclude for reading in (otherwise r with throw an error)
+empty <- fl[file.size(fl) == 0L]
+
+#read in all the coder files
+read_coder_files <- function(fl) {
+list_name <- "coder_dfs"
+list <- list()
+for (i in 1:length(fl)) { #for each file in the list
+  #if file and folder name match, and the file is not empty...
+  if ((str_match(fl[[i]], "Micro/(.*?)/fims")[2] == str_match(fl[[i]], "affect/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
+    #get info to add to the dfs
+    id_file_name <- str_match(fl[[i]], "affect/(.*?)_[A-Za-z]")[2] #this is the participant id
+    coder_initials <- str_match(fl[[i]], "Micro_(.*?).txt")[2]
+    #read the file into r, create column names
+    df <- read.table(fl[[i]], header=FALSE, fill=TRUE, sep="\t")
+    colnames(df) <- c("Tier", "Participant", "Time", str_c(coder_initials, "_code")) #column names are Tier, Participant, Time, and <coder initials>_code
+    #set the df name to match the participant: <id_file_name>_<child|parent>
+    df_name <- str_c(id_file_name, "_", tolower(df$Participant[1]), "_", coder_initials) #need to add coder initials so that they're not all the same name
+    #assign df to the list
+    list[[i]] <- df 
+    names(list)[i] <- df_name
+  } else if (fl[[i]] %in% empty) { #else if the file is empty...
+    #write a message telling the person that the file name is empty and not being read in
+    print(paste0(str_match(fl[[i]], 'affect/(.*)')[2], " is empty -- not being read into R"))
+  } else { #if the file and folder name do not match...
+    #write a message saying to check naming
+    print(paste0("file ", str_match(fl[[i]], 'affect/(.*)')[2], " and folder ", str_match(fl[[i]], "Micro/(.*?)/fims")[2], " names do not match, not being read into R now -- please check"))
+  }
+}
+#assign the list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+read_coder_files(fl)
+```
+
+# Merge the consensus codes with the coders' codes into the same df
+NOTE: if you run the for function more than once, will get weird errors
+```{r}
+#remove the null and na entries in the list (from files that were not read in)
+coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
+coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+
+#change the time variable to be double in all dfs
+for (i in 1:length(coder_dfs)) {
+  if (is.character(coder_dfs[[i]]$Time)) { #if the time variable is a character...
+    coder_dfs[[i]]$Time <- as.numeric(lubridate::hms(coder_dfs[[i]]$Time)) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+#get the names of all the dataframes
+cons_df_names <- names(cons_codes) #names of consensus code dfs
+mbb_cons_df_names <- cons_df_names[str_detect(cons_df_names, "MBB")] #remove any df names that are not used
+coder_df_names <- names(coder_dfs) #names of the coder dfs
+
+#for all of the names_of_dfs, if cons_df_names contains the name, then full_join it with the df that contains it on Tier and Time
+join_coder_consensus_dfs <- function(coder_dfs, cons_codes, coder_df_names, mbb_cons_df_names) {
+list_name <- "merged_dfs" #set the name of the output list
+list <- list() #initialize an empty list to fill below
+for (i in 1:length(mbb_cons_df_names)) { #for all of the consensus code sheet names
+  for (j in 1:length(coder_df_names)) { #for all of the coder dfs
+    #if the name of the consensus code sheet (e.g., MBB_2_074_parent) is contained in the coder df name (which should be MBB_2_074_parent_<coder initials>)
+    if (suppressWarnings(str_detect(coder_df_names[j], stringr::regex(mbb_cons_df_names[i], ignore.case=T)))) {
+      #assign the name of the df to be the consensus code name
+      df_name <- mbb_cons_df_names[i]
+      if (!exists(df_name)) { #if the df has not already been made...
+      df1 <- cons_codes[[i]] %>% dplyr::left_join(coder_dfs[[j]], by = c("Tier", "Participant", "Time")) #left join the coder df to the consensus code df (all columns are same except for the coder code, <coder initiails>_code)
+      list[[i]] <- assign(df_name, df1, envir=.GlobalEnv) #assign the df to the global environment (need to do for this loop so that next time it runs can tell if it was made already or not)
+      names(list)[i] <- df_name #name the df
+    }
+     else { #if it has been made already...
+      df1 <- df1 %>% dplyr::left_join(coder_dfs[[j]], by = c("Tier", "Participant", "Time")) #left join the next coder name to the df that was made above
+      list[[i]] <- assign(df_name, df1, envir=.GlobalEnv) #assign to the global envir
+      names(list)[i] <- df_name
+     } 
+    }
+  }
+}
+#assign the completed list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+join_coder_consensus_dfs(coder_dfs, cons_codes, coder_df_names, mbb_cons_df_names)
+```
+
+# Create the individual second agreement/disagreement files
+(1 for each participant_child/parent file) 
+AO_agree
+MB_agree etc
+```{r}
+#remove the null entries in the list (from files that were not read in)
+#merged_dfs = merged_dfs[-which(sapply(merged_dfs, is.null))]
+
+#make all the consensus code variables character (they will automatically be, but to avoid the loop below from erroring when some are not filled in currently)
+for (i in 1:length(merged_dfs)) {
+  if (is.logical(merged_dfs[[i]]$`Consensus Code`)) { #if the time variable is a character...
+    merged_dfs[[i]]$`Consensus Code` <- as.character(merged_dfs[[i]]$`Consensus Code`) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+#create the variables (relative time, binary agree for each code and coder)
+for (df_name in names(merged_dfs)) {
+    merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], across(contains("_code"), ~case_when(
+      #if the string is found in the coder code and consensus code, variable is 1
+      grepl("neutral", .) & grepl("neutral", `Consensus Code`) ~ 1, 
+      grepl("positive", .) & grepl("positive", `Consensus Code`) ~ 1,
+      grepl("dysphoric", .) & grepl("dysphoric", `Consensus Code`) ~ 1,
+      grepl("angry", .) & grepl("angry", `Consensus Code`) ~ 1,
+      grepl("uncodable", .) & grepl("uncodable", `Consensus Code`) ~ 1,
+      grepl("end", .) & grepl("end", `Consensus Code`) ~ 1,
+      grepl("start", .) & grepl("start", `Consensus Code`) ~ 1,
+      is.na(.) | is.na(`Consensus Code`) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
+      TRUE ~ 0 #otherwise if none of the above are met, value is 0
+  ), .names = "{col}_agree"), #variable names are <coder initials>_code_agree
+  relative_time = round(Time - Time[1], digits=0)) #relative time is Time minus initial time, rounded to nearest integer
+  
+  #select from the merged dfs only the columns we care about   
+  merged_dfs[[df_name]] <- dplyr::select(merged_dfs[[df_name]],
+                                           Tier,
+                                           Participant,
+                                           Time,
+                                           `Consensus Code`,
+                                           contains("_code"),
+                                           relative_time)
+}
+
+```
+
+## Write individual participant files with binary agreement per code
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/" #path to write the files
+
+#for each entry in the merged_dfs list, write the entry as a .csv called "name_agreement.csv"
+lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]], 
+                                      file = paste0(str_c(path, names(merged_dfs)[i], "_agreement.csv", sep="")),
+                                      row.names = FALSE))
+
+#NULLs output below mean that writing the file was successful 
+```
+
+# Create summary file for participant 
+## Calculate % agreement 
+AO_total%, AO_neutral%, AO_warm%, etc. for each coder
+Calculate cohen's kappa between coder and consensus codes
+```{r}
+#save total % agreement and by code into a list of dfs: 'perc_agree_dfs" (1 df per participant)
+create_agreement_dfs <- function(merged_dfs) {
+  list_name <- "perc_agree_dfs"
+  list <- list()
+  for (i in 1:length(merged_dfs)) {
+    #create the final df name
+    final_df_name <- str_c(names(merged_dfs)[i], "_%agree", sep="")
+    
+    #make the df with total % agreement across all codes
+    total_df <- as.data.frame(colSums(merged_dfs[[i]] %>% dplyr::select(contains("_agree")), na.rm=TRUE)/colSums(!is.na(merged_dfs[[i]] %>% dplyr::select(contains("_agree"))))) #total of 1s in the coder agree column that are not NA divided by non-na rows
+    colnames(total_df) <- c("total_%agree") #name % agree column
+    total_df <- rownames_to_column(total_df, var = "coder") #name first coder column
+    
+    #create consolidated consensus code columns to account for small differences in consensus code entries (e.g., neutral vs. neutral affect)
+    merged_dfs[[i]] <- mutate(merged_dfs[[i]], cons_codes_consol = case_when(
+        grepl("neutral", `Consensus Code`) ~ "neutral affect",
+        grepl("positive", `Consensus Code`) ~ "positive affect",
+        grepl("dysphoric", `Consensus Code`) ~ "negative - dysphoric/internalizing affect",
+        grepl("angry", `Consensus Code`) ~ "negative - angry/aggressive affect",
+        grepl("uncodable", `Consensus Code`) ~ "uncodable",
+        grepl("end", `Consensus Code`, ignore.case=T) ~ "end task",
+        grepl("start", `Consensus Code`) ~ "start task"
+      ))
+
+      #calculate percent agreement by code
+      code_df <- merged_dfs[[i]] %>% 
+            group_by(cons_codes_consol) %>% #collect entries relevant to each of the cons_code_consol values
+            summarise(across(contains("_agree"), ~sum(., na.rm=T)/sum(!is.na(.)), .names="{col}")) %>% #for each coder's "_agree" variable, sum their entries and divide by the tally of entries for that consens_codes_consol code where the coder's _agree variable is not NA
+            as.data.frame()
+      #change the columns
+      #remove the NA column for NA values of cons_codes_consol
+      code_df <- filter(code_df, !is.na(cons_codes_consol))
+      # first remember the new column names
+      names <- str_c(code_df$cons_codes_consol, "%agree", sep="_")
+      # transpose all but the first column (names)
+      code_df_t <- as.data.frame(t(code_df[,-1]))
+      #assign column names to the columns
+      colnames(code_df_t) <- names 
+      #label first column 
+      code_df_t <- rownames_to_column(code_df_t, var = "coder")
+    
+      #merge these with total % agreement dataframe
+      final_df <- total_df %>% left_join(code_df_t, by = "coder")
+    
+      #assign this to the list
+      list[[i]] <- final_df 
+      names(list)[i] <- final_df_name
+  }
+  #assign the completed list to the global environment
+  assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+create_agreement_dfs(merged_dfs) 
+
+```
+
+## Calculate kappa for each coder (total and for each code)
+
+```{r}
+#create loop to go through all the merged_dfs and save the kappas in a list
+create_kappa_dfs <- function(merged_dfs) {
+  list_name_kappa <- "kappa_dfs"
+  list_kappa <- list()
+  for (i in 1:length(merged_dfs)) {
+    kappa_df_name <- str_c(names(merged_dfs)[i], "_kappas", sep="")
+    
+    #create dummy code columns for each code for each coder's code and the consensus codes
+    merged_dfs[[names(merged_dfs)[i]]] <- mutate(merged_dfs[[names(merged_dfs)[i]]],
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "neutral"), 1, 0), .names="neutral_{col}"),
+      neutral_consens = ifelse(str_detect(`Consensus Code`, "neutral"), 1, 0),
+      positive_consens = ifelse(str_detect(`Consensus Code`, "positive"), 1, 0),
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "positive"), 1, 0), .names="positive_{col}"),
+      uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "uncodable"), 1, 0), .names="uncodable_{col}"),
+      neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0), .names="neg_dys_{col}"),
+      neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0), .names="neg_angry_{col}"),
+      )
+    
+    #get a list of coder initials and list of codes
+    #select variables that end with code and have the first letter uppercase
+    coders_init <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$") & stri_locate_first_regex(colnames(merged_dfs[[names(merged_dfs)[i]]]), "[A-Z]")==1)] 
+    #remove NA values in coders (stri_locate_first_regex returns NA for columns that don't have any uppercase)
+    coders <- coders_init[!is.na(coders_init)] 
+    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    
+    #create an empty df to hold the kappas
+    kappas <- data.frame(matrix(NA, nrow=length(coders),ncol=length(codes)))
+    
+    #calculate kappas for each coder and code, put in df
+    for (k in 1:length(coders)) {
+      for (j in 1:length(codes)){
+        if (codes[j] != "total") { #for all codes except total kappa...
+          dum_col_name = str_c(codes[j], coders[k], sep="_") #coder dummy code column name e.g., neutral_MA_code
+          cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
+          kappas[k , j] <- kappa2(cbind(merged_dfs[[i]][[cons_col_name]], merged_dfs[[i]][[dum_col_name]]))$value # Calculate kappa, add new variable to data
+          colnames(kappas)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
+          rownames(kappas)[k] <- paste0(str_c(coders[k], "agree", sep="_")) #name the row "MA_code_agree"
+          }
+        else { #do a different procedure for total kappa
+          coder_col_name = coders[k] #coder code variable
+          cons_col_init_name = "Consensus Code" #consensus code
+          kappas[k , j] <- kappa2(cbind(merged_dfs[[i]][[cons_col_init_name]], merged_dfs[[i]][[coder_col_name]]))$value #calculate total kappa, add new variable 
+          colnames(kappas)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
+          rownames(kappas)[k] <- paste0(str_c(coders[k], "agree", sep="_")) #name the row "MA_code_agree"
+        }
+      }
+    }
+    #create 'coder' first column
+    kappas <- rownames_to_column(kappas, var = "coder")
+    
+    #assign the kappa df to the list
+    list_kappa[[i]] <-  kappas 
+    names(list_kappa)[i] <- kappa_df_name
+  }
+  #assign the list to the global environment
+  assign(list_name_kappa, list_kappa, envir=.GlobalEnv)
+}
+
+#apply the function
+create_kappa_dfs(merged_dfs)
+
+#NOTE: NAs mean that either consensus code or coder had no instances of the code
+```
+
+## Calculate kappa across all coders for each participant
+
+```{r}
+create_kappa_allcoder_dfs <- function(merged_dfs) {
+  list_name_kappa_allc <- "kappa_allcoder_dfs"
+  list_kappa_allc <- list()
+  codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+  for (i in 1:length(merged_dfs)) {
+    kappa_allcoders_df_name <- str_c(names(merged_dfs)[i], "_kappas_allcoders", sep="")
+    #get list of 'newest' code columns to calculate across
+    newest_codes <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "[A-Z]_code$"))]
+    
+    #select columns from each df to start with
+    kappas_all_coders_start <- merged_dfs[[i]] %>% dplyr::select(Time, `Consensus Code`, all_of(newest_codes))
+    
+    #create the long df with coders' list of codes stacked on top of each other
+    kappas_allcoders_df <- reshape2::melt(kappas_all_coders_start, id=c("Time", "Consensus Code"))
+    #rename the new variables to be more initiutive
+    names(kappas_allcoders_df) <- c("Time", "Consensus Code", "coder", "code")
+    
+    #each kappa code: add to that df the columns you created with 0 and 1 for each code above
+    kappas_allcoders_df <- mutate(kappas_allcoders_df,
+          neutral_code = ifelse(str_detect(code, "neutral"), 1, 0),
+          neutral_consens = ifelse(str_detect(`Consensus Code`, "neutral"), 1, 0),
+          positive_consens = ifelse(str_detect(`Consensus Code`, "positive"), 1, 0),
+          positive_code = ifelse(str_detect(code, "positive"), 1, 0),
+          uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
+          uncodable_code = ifelse(str_detect(code, "uncodable"), 1, 0),
+          neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
+          neg_dys_code = ifelse(str_detect(code, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
+          neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
+          neg_angry_code = ifelse(str_detect(code, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0)
+          )
+    
+    #create an empty df to hold the kappas
+    kappas_allcoders <- data.frame(matrix(NA, nrow=1,ncol=length(codes)))
+    rownames(kappas_allcoders) <- "all_coders"
+    
+    #calculate kappas for each coder and code, put in df
+      for (j in 1:length(codes)){
+        if (codes[j] != "total") { #for all codes except total kappa...
+          dum_col_name = str_c(codes[j], "code", sep="_") #coder dummy code column name e.g., neutral_code
+          cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
+          kappas_allcoders[1, j] <- kappa2(cbind(kappas_allcoders_df[[cons_col_name]], kappas_allcoders_df[[dum_col_name]]))$value # Calculate kappa, add new variable to data
+          colnames(kappas_allcoders)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
+          }
+        else { #do a different procedure for total kappa
+          kappas_allcoders[1 , j] <- kappa2(cbind(kappas_allcoders_df[["Consensus Code"]], kappas_allcoders_df[["code"]]))$value #calculate total kappa, add new variable 
+          colnames(kappas_allcoders)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
+        }
+      }
+    #assign the kappa all coder df to the list
+    list_kappa_allc[[i]] <-  kappas_allcoders 
+    names(list_kappa_allc)[i] <- kappa_allcoders_df_name
+  }
+  #assign the list to the global environment
+  assign(list_name_kappa_allc, list_kappa_allc, envir=.GlobalEnv)
+}
+
+#apply the function
+create_kappa_allcoder_dfs(merged_dfs)
+```
+
+## Merge kappas and % agreement dfs for each participant
+NOTE: order of the dfs in each list is the same because the original list used to create them (merged_dfs) is the same across both
+```{r}
+indiv_dfs <- map2(kappa_dfs, perc_agree_dfs, dplyr::full_join, by = "coder") #for each entry of these lists, full join them by the coder column
+```
+
+## Write the summary files for each participant
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/"
+
+#for each entry in the indiv_dfs kappas and % agreement list, write a .csv
+lapply(1:length(indiv_dfs), function(i) write.csv(indiv_dfs[[i]], 
+                                      file = paste0(str_c(path, sub("_kappas", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
+                                      row.names = FALSE))
+```
+
+
+# Create summary file for each coder aggregated across participants
+
+```{r}
+#create a really long dataframe from the merged dfs 
+for (i in 1:(length(merged_dfs))) {
+  merged_dfs[[i]]$participant_id <- names(merged_dfs)[i] #add participant id variable to each merged df for merging
+}
+
+#bind rows for all dfs together
+mega_df <- bind_rows(merged_dfs)
+
+#calculate percent total agreement across all participants
+mega_df_summary <- mega_df %>% 
+  summarise(across(contains("_agree"), ~sum(., na.rm=T)/sum(!is.na(.)), .names="{sub('_code_agree', '', col)}_total_%agree")) #sum of agree instances for each coder divided by tally of non-NA values
+
+#transpose the df so that each coder's total % agree has their own row
+mega_df_summary_t <- as.data.frame(t(mega_df_summary))
+rownames(mega_df_summary_t) <- gsub('.{13}$', '', rownames(mega_df_summary_t)) #add coder rownames
+colnames(mega_df_summary_t) <- "total_%agree" #make the column
+mega_df_summary_t <- rownames_to_column(mega_df_summary_t, var = "coder") #name the first coder column
+
+#create consolidated consensus code columns
+mega_df <- mega_df %>% 
+  mutate(cons_codes_consol = case_when(
+    grepl("neutral", `Consensus Code`) ~ "neutral affect",
+    grepl("positive", `Consensus Code`) ~ "positive affect",
+    grepl("dysphoric", `Consensus Code`) ~ "negative - dysphoric/internalizing affect",
+    grepl("angry", `Consensus Code`) ~ "negative - angry/aggressive affect",
+    grepl("uncodable", `Consensus Code`) ~ "uncodable",
+    grepl("end", `Consensus Code`, ignore.case=T) ~ "end task",
+    grepl("start", `Consensus Code`) ~ "start task"
+  ))
+
+#calculate percent agreement by code (same formula as in individual dfs)
+code_df <- mega_df %>% 
+      group_by(cons_codes_consol) %>% 
+      summarise(across(contains("_agree"), ~sum(., na.rm=T)/sum(!is.na(.)), .names="{col}")) %>% 
+      as.data.frame()
+#change the columns
+#remove the NA row
+code_df <- code_df %>% filter(!is.na(cons_codes_consol))
+# first remember the new column names
+names <- str_c(code_df$cons_codes_consol, "%agree", sep="_")
+# transpose all but the first column (names)
+code_df_t <- as.data.frame(t(code_df[,-1]))
+colnames(code_df_t) <- names #assign the column names, "code_%agree"
+rownames(code_df_t) <- gsub('.{11}$', '', rownames(code_df_t)) #extract the coder initials and assign as rownames
+#name the first coder column 
+code_df_t <- rownames_to_column(code_df_t, var = "coder")
+
+#calculate kappas (basically the same thing that was done in loop above)
+mega_df <- mutate(mega_df,
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
+      neutral_consens = ifelse(grepl("neutral", `Consensus Code`), 1, 0),
+      positive_consens = ifelse(grepl("positive", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
+      uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
+      neg_dys_consens = ifelse(grepl("negative - dysphoric", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
+      neg_angry_consens = ifelse(grepl("negative - angry", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
+      )
+
+#get a list of coder initials and list of codes
+#select variables that end with code and have the first letter uppercase
+coders_init_mega <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$") & stri_locate_first_regex(colnames(mega_df), "[A-Z]")==1)] 
+#remove NA values in coders (stri_locate_first_regex returns NA for columns that don't have any uppercase)
+coders_mega <- coders_init_mega[!is.na(coders_init_mega)] 
+codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    
+#create an empty df to hold the kappas
+kappas_mega <- data.frame(matrix(NA, nrow=length(coders_mega),ncol=length(codes)))
+
+#calculate kappas for each coder and code, put in df
+for (k in 1:length(coders_mega)) {
+  for (j in 1:length(codes)){
+    if (codes[j] != "total") { #for all codes except total kappa...
+      dum_col_name = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_")
+      cons_col_name = str_c(codes[j], "consens", sep="_")
+      kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_name]], mega_df[[dum_col_name]]))$value # Adding new variable to data
+      colnames(kappas_mega)[j] <- paste0(str_c(codes[j], "kappa", sep="_"))
+      rownames(kappas_mega)[k] <- coders_mega[k]
+      }
+    else { #do a different procedure for total kappa
+      coder_col_name = coders_mega[k]
+      cons_col_init_name = "Consensus Code"
+      kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_init_name]], mega_df[[coder_col_name]]))$value
+      colnames(kappas_mega)[j] <- paste0(str_c(codes[j], "kappa", sep="_"))
+      rownames(kappas_mega)[k] <- sub('_code', '', coders_mega[k])
+    }
+  }
+}
+#create 'coder' first column
+kappas_mega <- rownames_to_column(kappas_mega, var = "coder")
+
+#merge the mega_df_summary_t, code_df_t, and kappas_mega dfs
+summary_final <- mega_df_summary_t %>% 
+  full_join(code_df_t, by = "coder") %>% 
+  full_join(kappas_mega, by = "coder")
+```
+
+## Write summary file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/"
+
+#write the summary file csv
+write_csv(summary_final, str_c(path, "all_summary.csv"))
+```
+
