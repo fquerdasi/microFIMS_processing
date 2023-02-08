@@ -468,10 +468,10 @@ mega_df <- mutate(mega_df,
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
       uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`), 1, 0),
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
-      neg_dys_consens = ifelse(grepl("negative - dysphoric", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
-      neg_angry_consens = ifelse(grepl("negative - angry", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
+      neg_dys_consens = ifelse(grepl("negative - dysphoric", `Consensus Code`) | grepl("negative – dysphoric", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - dysphoric", .) | grepl("negative – dysphoric", .) , 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
+      neg_angry_consens = ifelse(grepl("negative - angry", `Consensus Code`) | grepl("negative – angry", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - angry", .) | grepl("negative – angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
       )
 
 #get a list of coder initials and list of codes
@@ -491,14 +491,14 @@ for (k in 1:length(coders_mega)) {
       dum_col_name = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_")
       cons_col_name = str_c(codes[j], "consens", sep="_")
       kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_name]], mega_df[[dum_col_name]]))$value # Adding new variable to data
-      colnames(kappas_mega)[j] <- paste0(str_c(codes[j], "kappa", sep="_"))
+      colnames(kappas_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_"))
       rownames(kappas_mega)[k] <- coders_mega[k]
       }
     else { #do a different procedure for total kappa
       coder_col_name = coders_mega[k]
       cons_col_init_name = "Consensus Code"
       kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_init_name]], mega_df[[coder_col_name]]))$value
-      colnames(kappas_mega)[j] <- paste0(str_c(codes[j], "kappa", sep="_"))
+      colnames(kappas_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_"))
       rownames(kappas_mega)[k] <- sub('_code', '', coders_mega[k])
     }
   }
@@ -506,10 +506,62 @@ for (k in 1:length(coders_mega)) {
 #create 'coder' first column
 kappas_mega <- rownames_to_column(kappas_mega, var = "coder")
 
+#calculate kappas aggregated across all coders
+
+#get list of 'newest' code columns to calculate across
+newest_codes_mega <- colnames(mega_df)[which(str_detect(colnames(mega_df), "[A-Z]_code$"))]
+    
+#select columns from each df to start with
+kappas_all_coders_start <- mega_df %>% dplyr::select(Time, `Consensus Code`, participant_id, all_of(newest_codes_mega))
+    
+#create the long df with coders' list of codes stacked on top of each other
+kappas_allcoders_df <- reshape2::melt(kappas_all_coders_start, id=c("Time", "Consensus Code", "participant_id"))
+#rename the new variables to be more initiutive
+names(kappas_allcoders_df) <- c("Time", "Consensus Code", "participant_id", "coder", "code")
+    
+#each kappa code: add to that df the columns you created with 0 and 1 for each code above (THIS IS CURRENTLY VER REPETITIVE BUT WITH MELT FUNCTION CAN'T IMMEDIATELY THINK OF A DIFF WAY)
+kappas_allcoders_df <- mutate(kappas_allcoders_df,
+      neutral_code = ifelse(str_detect(code, "neutral"), 1, 0),
+      neutral_consens = ifelse(str_detect(`Consensus Code`, "neutral"), 1, 0),
+      positive_consens = ifelse(str_detect(`Consensus Code`, "positive"), 1, 0),
+      positive_code = ifelse(str_detect(code, "positive"), 1, 0),
+      uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
+      uncodable_code = ifelse(str_detect(code, "uncodable"), 1, 0),
+      neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
+      neg_dys_code = ifelse(str_detect(code, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
+      neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
+      neg_angry_code = ifelse(str_detect(code, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0)
+      )
+    
+#create an empty df to hold the kappas
+kappas_allcoders_mega <- data.frame(matrix(NA, nrow=1,ncol=length(codes)))
+rownames(kappas_allcoders_mega) <- "all_coders"
+
+#calculate kappas for each coder and code, put in df
+  for (j in 1:length(codes)){
+    if (codes[j] != "total") { #for all codes except total kappa...
+      dum_col_name = str_c(codes[j], "code", sep="_") #coder dummy code column name e.g., neutral_code
+      cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
+      kappas_allcoders_mega[1, j] <- kappa2(cbind(kappas_allcoders_df[[cons_col_name]], kappas_allcoders_df[[dum_col_name]]))$value # Calculate kappa, add new variable to data
+      colnames(kappas_allcoders_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
+      }
+    else { #do a different procedure for total kappa
+      kappas_allcoders_mega[1 , j] <- kappa2(cbind(kappas_allcoders_df[["Consensus Code"]], kappas_allcoders_df[["code"]]))$value #calculate total kappa, add new variable 
+      colnames(kappas_allcoders_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
+    }
+  }
+
+#create 'coder' first column
+kappas_allcoders_mega <- rownames_to_column(kappas_allcoders_mega, var = "coder")
+
+#bind rows for kappa_allcoders and kappa for each coder
+summary_kappas <- kappas_allcoders_mega %>% 
+  bind_rows(kappas_mega)
+
 #merge the mega_df_summary_t, code_df_t, and kappas_mega dfs
 summary_final <- mega_df_summary_t %>% 
   full_join(code_df_t, by = "coder") %>% 
-  full_join(kappas_mega, by = "coder")
+  full_join(summary_kappas, by = "coder")
 ```
 
 ## Write summary file
