@@ -375,6 +375,8 @@ create_kappa_allcoder_dfs <- function(merged_dfs) {
           colnames(kappas_allcoders)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
         }
       }
+    #create 'coder' first column
+    kappas_allcoders <- rownames_to_column(kappas_allcoders, var = "coder")
     #assign the kappa all coder df to the list
     list_kappa_allc[[i]] <-  kappas_allcoders 
     names(list_kappa_allc)[i] <- kappa_allcoders_df_name
@@ -390,7 +392,11 @@ create_kappa_allcoder_dfs(merged_dfs)
 ## Merge kappas and % agreement dfs for each participant
 NOTE: order of the dfs in each list is the same because the original list used to create them (merged_dfs) is the same across both
 ```{r}
-indiv_dfs <- map2(kappa_dfs, perc_agree_dfs, dplyr::full_join, by = "coder") #for each entry of these lists, full join them by the coder column
+#bind rows for kappas and allcoders kappa dfs 
+kappas_all_dfs <- map2(kappa_allcoder_dfs, kappa_dfs, dplyr::bind_rows)
+
+#full join the percent agreement and kappas
+indiv_dfs <- map2(kappas_all_dfs, perc_agree_dfs, dplyr::full_join, by = "coder") #for each entry of these lists, full join them by the coder column
 ```
 
 ## Write the summary files for each participant
@@ -399,7 +405,7 @@ path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cer
 
 #for each entry in the indiv_dfs kappas and % agreement list, write a .csv
 lapply(1:length(indiv_dfs), function(i) write.csv(indiv_dfs[[i]], 
-                                      file = paste0(str_c(path, sub("_kappas", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
+                                      file = paste0(str_c(path, sub("_kappas_allcoders", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
                                       row.names = FALSE))
 ```
 
