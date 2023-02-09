@@ -1,0 +1,168 @@
+---
+title: "fims_microcoding_reliability"
+author: "Fran Querdasi"
+date: "2023-02-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+suppressPackageStartupMessages({
+  library(stringr)
+  library(stringi)
+  library(readxl) 
+  library(purrr)
+  library(lubridate)
+  library(irr) #for cohen's kappa
+  source("fims_microcoding_helper_functions.R")
+  library(reshape2)
+  library(tidyverse)
+})
+```
+
+## Load data
+For reliability, during Winter 2023 only affect codes will be tested, and only one interaction will be coded for each participant. 
+
+```{r}
+reliability_codes <- "../../../../Lab/Video_coding_fims_micro/fims_micro" #overall directory where all of the codes
+
+#get all of the .txt files from within the overall directory
+fl <- list.files(path=reliability_codes, pattern = "*.txt", recursive=TRUE, full.names = TRUE) #this will output a list of the files
+
+#get a list of empty files from df to exclude for reading in (otherwise r with throw an error)
+empty <- fl[file.size(fl) == 0L]
+
+#read in all the coder files
+read_reliability_files <- function(fl) {
+list_name <- "reliability_dfs"
+list <- list()
+for (i in 1:length(fl)) { #for each file in the list
+  #if file and folder name match, and the file is not empty...
+  if ((gsub("fims_micro/", "", str_match(fl[[i]], "micro/(.*?)/fims")[2]) == str_match(fl[[i]], "affect/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
+    #get info to add to the dfs
+    id_file_name <- str_match(fl[[i]], "affect/(.*?)_[A-Za-z]")[2] #this is the participant id
+    coder_initials <- str_match(fl[[i]], "Micro_(.*?).txt")[2]
+    #read the file into r, create column names
+    df <- read.table(fl[[i]], header=FALSE, fill=TRUE, sep="\t")
+    colnames(df) <- c("Tier", "Participant", "Time", str_c(coder_initials, "_code")) #column names are Tier, Participant, Time, and <coder initials>_code
+    #set the df name to match the participant: <id_file_name>_<child|parent>
+    df_name <- str_c(id_file_name, "_", tolower(df$Participant[1]), "_", coder_initials) #need to add coder initials so that they're not all the same name
+    #assign df to the list
+    list[[i]] <- df 
+    names(list)[i] <- df_name
+  } else if (fl[[i]] %in% empty) { #else if the file is empty...
+    #write a message telling the person that the file name is empty and not being read in
+    print(paste0(str_match(fl[[i]], 'affect/(.*)')[2], " is empty -- not being read into R"))
+  } else { #if the file and folder name do not match...
+    #write a message saying to check naming
+    print(paste0("file ", str_match(fl[[i]], 'affect/(.*)')[2], " and folder ", gsub("fims_micro/", "", str_match(fl[[i]], "micro/(.*?)/fims")[2]), " names do not match, not being read into R now -- please check"))
+  }
+}
+#assign the list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+read_reliability_files(fl)
+```
+
+# Merge reliability files by participant
+```{r}
+#remove the null and na entries in the list (from files that were not read in)
+reliability_dfs = reliability_dfs[-which(sapply(reliability_dfs, is.null))]
+
+#change the time variable to be double in all dfs
+for (i in 1:length(reliability_dfs)) {
+  if (is.character(reliability_dfs[[i]]$Time)) { #if the time variable is a character...
+    reliability_dfs[[i]]$Time <- as.numeric(lubridate::hms(reliability_dfs[[i]]$Time)) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+#get the names of all the dataframes
+reliability_df_names <- names(reliability_dfs) #names of the coder dfs
+
+#for all of the names_of_dfs, if cons_df_names contains the name, then full_join it with the df that contains it on Tier and Time
+merge_reliability_dfs <- function(reliability_dfs, reliability_df_names) {
+list_name <- "merged_dfs" #set the name of the output list
+list <- list() #initialize an empty list to fill below
+for (i in 1:(length(reliability_df_names)-1)) { #for all of the reliability dfs
+    #if the name of the first df (e.g., MBB_2_074_parent_MA) has the same name as the next df minus the coder initials,
+    if (str_detect(str_sub(reliability_df_names[i], start=1, end=(stri_locate_first_regex(reliability_df_names[i], "_[A-Z]")[1]-1)), str_sub(reliability_df_names[i+1], start=1, end=(stri_locate_first_regex(reliability_df_names[i+1], "_[A-Z]")[1]-1)))) {
+      #assign the name of the df to be the name of the first file minus coder initials
+      df_name <- str_sub(reliability_df_names[i], start=1, end=(stri_locate_first_regex(reliability_df_names[i], "_[A-Z]")[1]-1))
+      if (!exists(df_name)) { #if the df has not already been made...
+      df1 <- reliability_dfs[[i]] %>% dplyr::left_join(reliability_dfs[[i+1]], by = c("Tier", "Participant", "Time")) 
+      list[[i]] <- assign(df_name, df1, envir=.GlobalEnv) #assign the df to the global environment (need to do for this loop so that next time it runs can tell if it was made already or not)
+      names(list)[i] <- df_name #name the df
+      }
+      else { #if it has been made already...
+      df1 <- df1 %>% dplyr::left_join(reliability_dfs[[i+1]], by = c("Tier", "Participant", "Time")) #left join the next coder name to the df that was made above
+      list[[i]] <- assign(df_name, df1, envir=.GlobalEnv) #assign to the global envir
+      names(list)[i] <- df_name
+     } 
+  }
+}
+#assign the completed list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+merge_reliability_dfs(reliability_dfs, reliability_df_names)
+
+#remove the null entries in the list (from files that were not read in)
+merged_dfs = merged_dfs[-which(sapply(merged_dfs, is.null))]
+```
+
+# Create the individual second agreement/disagreement files
+(1 for each participant_child/parent file) 
+AO_agree
+MB_agree etc
+```{r}
+#make all the consensus code variables character (they will automatically be, but to avoid the loop below from erroring when some are not filled in currently)
+for (i in 1:length(merged_dfs)) {
+  if (is.logical(merged_dfs[[i]]$`Consensus Code`)) { #if the time variable is a character...
+    merged_dfs[[i]]$`Consensus Code` <- as.character(merged_dfs[[i]]$`Consensus Code`) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+#create the variables (relative time, binary agree for each code and coder)
+for (df_name in names(merged_dfs)) {
+    merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], across(contains("_code"), ~case_when(
+      #if the string is found in the coder code and consensus code, variable is 1
+      grepl("neutral", .) & grepl("neutral", `Consensus Code`) ~ 1, 
+      grepl("positive", .) & grepl("positive", `Consensus Code`) ~ 1,
+      grepl("dysphoric", .) & grepl("dysphoric", `Consensus Code`) ~ 1,
+      grepl("angry", .) & grepl("angry", `Consensus Code`) ~ 1,
+      grepl("uncodable", .) & grepl("uncodable", `Consensus Code`) ~ 1,
+      grepl("end", .) & grepl("end", `Consensus Code`) ~ 1,
+      grepl("start", .) & grepl("start", `Consensus Code`) ~ 1,
+      is.na(.) | is.na(`Consensus Code`) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
+      TRUE ~ 0 #otherwise if none of the above are met, value is 0
+  ), .names = "{col}_agree"), #variable names are <coder initials>_code_agree
+  relative_time = round(Time - Time[1], digits=0)) #relative time is Time minus initial time, rounded to nearest integer
+  
+  #select from the merged dfs only the columns we care about   
+  merged_dfs[[df_name]] <- dplyr::select(merged_dfs[[df_name]],
+                                           Tier,
+                                           Participant,
+                                           Time,
+                                           `Consensus Code`,
+                                           contains("_code"),
+                                           relative_time)
+}
+
+```
+
+
+# Experiment with getting unique coder column combinations
+```{r}
+cols <- c("a", "b", "c", "d")
+indices <- 1:length(cols)
+combn(unique(indices), 2)
+```
+
