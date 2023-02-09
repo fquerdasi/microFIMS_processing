@@ -256,19 +256,35 @@ create_agreement_dfs(merged_dfs)
 
 ## Calculate base rate for each code
 ```{r}
+#calculate base rate for each code
+base_rates <- as.data.frame(table(mega_df$cons_codes_consol)) %>% 
+  mutate(base_rate_cons = Freq/sum(!is.na(mega_df$cons_codes_consol)))
 
+# first remember the new column names
+names <- c("end", "neg_angry", "neg_dys", "neutral", "positive", "start", "uncodable")
+# transpose all but the first column (names)
+base_rates_t <- as.data.frame(t(base_rates[,-1]))
+colnames(base_rates_t) <- str_c("baserate", names, sep="_") #assign the column names, "baserate_code"
+#get rid of the Freq row
+base_rates_t <- base_rates_t[-1, ]
+rownames(base_rates_t) <- "consensus_codes" #extract the coder initials and assign as rownames
+#name the first coder column 
+baserate_consens <- dplyr::select(base_rates_t, -contains("end"), -contains("start"))
 ```
 
 
-## Calculate kappa for each coder (total and for each code)
+## Calculate kappas (total and for each code) and base rates for each coder
 
 ```{r}
 #create loop to go through all the merged_dfs and save the kappas in a list
-create_kappa_dfs <- function(merged_dfs) {
+create_kappa_baserates_dfs <- function(merged_dfs) {
   list_name_kappa <- "kappa_dfs"
+  list_name_baserates <- "baserate_dfs"
   list_kappa <- list()
+  list_baserates <- list()
   for (i in 1:length(merged_dfs)) {
     kappa_df_name <- str_c(names(merged_dfs)[i], "_kappas", sep="")
+    baserate_df_name <- names(merged_dfs)[i]
     
     #create dummy code columns for each code for each coder's code and the consensus codes
     merged_dfs[[names(merged_dfs)[i]]] <- mutate(merged_dfs[[names(merged_dfs)[i]]],
@@ -279,9 +295,9 @@ create_kappa_dfs <- function(merged_dfs) {
       uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
       across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "uncodable"), 1, 0), .names="uncodable_{col}"),
       neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0), .names="neg_dys_{col}"),
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - dysphoric") | str_detect(., "negative – dysphoric"), 1, 0), .names="neg_dys_{col}"),
       neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0), .names="neg_angry_{col}"),
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - angry") | str_detect(., "negative – angry"), 1, 0), .names="neg_angry_{col}"),
       )
     
     #get a list of coder initials and list of codes
@@ -291,20 +307,28 @@ create_kappa_dfs <- function(merged_dfs) {
     coders <- coders_init[!is.na(coders_init)] 
     codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
     
-    #create an empty df to hold the kappas
+    #create empty dfs to hold the kappas and base rates
     kappas <- data.frame(matrix(NA, nrow=length(coders),ncol=length(codes)))
+    base_rates_coders <- data.frame(matrix(NA, nrow=length(coders), ncol=length(codes))) 
     
-    #calculate kappas for each coder and code, put in df
-    for (k in 1:length(coders)) {
-      for (j in 1:length(codes)){
-        if (codes[j] != "total") { #for all codes except total kappa...
+    #calculate kappas and base rates for each coder and code, put in df
+    for (j in 1:length(codes)){
+      for (k in 1:length(coders)) {
+        if (codes[j] != "total") { #for all codes except total...
           dum_col_name = str_c(codes[j], coders[k], sep="_") #coder dummy code column name e.g., neutral_MA_code
           cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
           kappas[k , j] <- kappa2(cbind(merged_dfs[[i]][[cons_col_name]], merged_dfs[[i]][[dum_col_name]]))$value # Calculate kappa, add new variable to data
           colnames(kappas)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
           rownames(kappas)[k] <- paste0(str_c(coders[k], "agree", sep="_")) #name the row "MA_code_agree"
+          
+          #calculate base rates for each coder
+          code_rate_coder = str_c(codes[j], coders[k], sep="_")
+          coder_codes = coders[k]
+          base_rates_coders[k, j] = sum(merged_dfs[[i]][[code_rate_coder]], na.rm=T)/sum(!is.na(merged_dfs[[i]][[coder_codes]]))
+          colnames(base_rates_coders)[j] <- str_c("baserate", codes[j], sep="_")
+          rownames(base_rates_coders)[k] <- paste0(str_c(coders[k], "agree", sep="_"))
           }
-        else { #do a different procedure for total kappa
+        else { #do a different procedure for total
           coder_col_name = coders[k] #coder code variable
           cons_col_init_name = "Consensus Code" #consensus code
           kappas[k , j] <- kappa2(cbind(merged_dfs[[i]][[cons_col_init_name]], merged_dfs[[i]][[coder_col_name]]))$value #calculate total kappa, add new variable 
@@ -315,17 +339,35 @@ create_kappa_dfs <- function(merged_dfs) {
     }
     #create 'coder' first column
     kappas <- rownames_to_column(kappas, var = "coder")
+    base_rates_coders <- rownames_to_column(base_rates_coders, var="coder")
+    base_rates_coders <- dplyr::select(base_rates_coders, -X6)
     
-    #assign the kappa df to the list
+    #calculate base rates for consensus codes, bind rows to the base_rate_coders df
+    codes_minus_total <- codes[1:length(codes)-1] #get a list of codes except total 
+    baserates_consens = data.frame(matrix(NA, nrow=1, ncol=length(codes_minus_total)))
+    for (h in 1:length(codes_minus_total)){
+      consens_code_col = str_c(codes_minus_total[h], "consens", sep="_")
+      baserates_consens[1, h] = sum(merged_dfs[[i]][[consens_code_col]], na.rm=T)/sum(!is.na(merged_dfs[[i]][[consens_code_col]]))
+      colnames(baserates_consens)[h] <- str_c("baserate", codes_minus_total[h], sep="_")
+      rownames(baserates_consens)[1] <- "consensus_codes"
+    }
+    #merge the consensus codes base rates with the coders' base rates
+    baserates_consens <- rownames_to_column(baserates_consens, var="coder")
+    baserates_all <- base_rates_coders %>% bind_rows(baserates_consens)
+    
+    #assign the dfs to the lists
     list_kappa[[i]] <-  kappas 
+    list_baserates[[i]] <- baserates_all
     names(list_kappa)[i] <- kappa_df_name
+    names(list_baserates)[i] <- baserate_df_name
   }
-  #assign the list to the global environment
+  #assign the lists to the global environment
   assign(list_name_kappa, list_kappa, envir=.GlobalEnv)
+  assign(list_name_baserates, list_baserates, envir=.GlobalEnv)
 }
 
 #apply the function
-create_kappa_dfs(merged_dfs)
+create_kappa_baserates_dfs(merged_dfs)
 
 #NOTE: NAs mean that either consensus code or coder had no instances of the code
 ```
@@ -401,8 +443,11 @@ NOTE: order of the dfs in each list is the same because the original list used t
 #bind rows for kappas and allcoders kappa dfs 
 kappas_all_dfs <- map2(kappa_allcoder_dfs, kappa_dfs, dplyr::bind_rows)
 
-#full join the percent agreement and kappas
-indiv_dfs <- map2(kappas_all_dfs, perc_agree_dfs, dplyr::full_join, by = "coder") #for each entry of these lists, full join them by the coder column
+#full join the percent agreementand kappas
+indiv_dfs_test <- map2(perc_agree_dfs, kappas_all_dfs, dplyr::full_join, by = "coder") #for each entry of these lists, full join them by the coder column
+
+#full join that to the baserates
+indiv_dfs <- map2(indiv_dfs_test, baserate_dfs, dplyr::full_join, by = "coder")
 ```
 
 ## Write the summary files for each participant
@@ -493,7 +538,7 @@ base_rates <- as.data.frame(table(mega_df$cons_codes_consol)) %>%
   mutate(base_rate_cons = Freq/sum(!is.na(mega_df$cons_codes_consol)))
 
 # first remember the new column names
-names <- c("end", "neg_angry", "neg_dys", "neutral", "positive", "start", "uncodable")
+names <- c("end", "neg_angry", "neg_dys", "neutral", "positive", "start", "uncodable") #ordered alphabetically 
 # transpose all but the first column (names)
 base_rates_t <- as.data.frame(t(base_rates[,-1]))
 colnames(base_rates_t) <- str_c("baserate", names, sep="_") #assign the column names, "baserate_code"
@@ -503,7 +548,7 @@ rownames(base_rates_t) <- "consensus_codes" #extract the coder initials and assi
 #name the first coder column 
 baserate_consens <- dplyr::select(base_rates_t, -contains("end"), -contains("start"))
     
-#create an empty df to hold the kappas
+#create an empty df to hold the kappas and the base rates
 kappas_mega <- data.frame(matrix(NA, nrow=length(coders_mega),ncol=length(codes)))
 base_rates_coders <- data.frame(matrix(NA, nrow=(length(coders_mega)-1),ncol=length(codes))) 
 
