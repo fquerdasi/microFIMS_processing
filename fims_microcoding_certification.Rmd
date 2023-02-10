@@ -254,25 +254,6 @@ create_agreement_dfs(merged_dfs)
 
 ```
 
-## Calculate base rate for each code
-```{r}
-#calculate base rate for each code
-base_rates <- as.data.frame(table(mega_df$cons_codes_consol)) %>% 
-  mutate(base_rate_cons = Freq/sum(!is.na(mega_df$cons_codes_consol)))
-
-# first remember the new column names
-names <- c("end", "neg_angry", "neg_dys", "neutral", "positive", "start", "uncodable")
-# transpose all but the first column (names)
-base_rates_t <- as.data.frame(t(base_rates[,-1]))
-colnames(base_rates_t) <- str_c("baserate", names, sep="_") #assign the column names, "baserate_code"
-#get rid of the Freq row
-base_rates_t <- base_rates_t[-1, ]
-rownames(base_rates_t) <- "consensus_codes" #extract the coder initials and assign as rownames
-#name the first coder column 
-baserate_consens <- dplyr::select(base_rates_t, -contains("end"), -contains("start"))
-```
-
-
 ## Calculate kappas (total and for each code) and base rates for each coder
 
 ```{r}
@@ -520,7 +501,7 @@ coders_mega <- coders_init_mega[!is.na(coders_init_mega)]
 #calculate kappas (basically the same thing that was done in loop above)
 mega_df <- mutate(mega_df,
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
-      neutral_consens = ifelse(grepl("neutral", `Consensus Code`), 1, 0),
+      neutral_consens = ifelse(grepl("neutral", `Consensus Code`), 1, 0), #if code is neutral, 1; otherwise, 0
       positive_consens = ifelse(grepl("positive", `Consensus Code`), 1, 0),
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
       uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`), 1, 0),
@@ -556,13 +537,13 @@ base_rates_coders <- data.frame(matrix(NA, nrow=(length(coders_mega)-1),ncol=len
 for (k in 1:length(coders_mega)) {
   for (j in 1:length(codes)){
     if (codes[j] != "total") { #for all codes except total kappa...
-      dum_col_name = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_")
-      cons_col_name = str_c(codes[j], "consens", sep="_")
+      dum_col_name = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_") #neutral_MA
+      cons_col_name = str_c(codes[j], "consens", sep="_") #neutral_consens
       kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_name]], mega_df[[dum_col_name]]))$value # Adding new variable to data
       colnames(kappas_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_"))
       rownames(kappas_mega)[k] <- coders_mega[k]
       #calculate base rates
-      code_rate_coder = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_")
+      code_rate_coder = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_") #neutral_MA
       coder_codes = coders_mega[k]
       base_rates_coders[k, j] = sum(mega_df[[code_rate_coder]])/sum(!is.na(mega_df[[coder_codes]]))
       colnames(base_rates_coders)[j] <- str_c("baserate", codes[j], sep="_")

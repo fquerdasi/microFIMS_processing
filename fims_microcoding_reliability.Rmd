@@ -73,9 +73,6 @@ read_reliability_files(fl)
 
 # Merge reliability files by participant
 ```{r}
-#remove the null and na entries in the list (from files that were not read in)
-reliability_dfs = reliability_dfs[-which(sapply(reliability_dfs, is.null))]
-
 #change the time variable to be double in all dfs
 for (i in 1:length(reliability_dfs)) {
   if (is.character(reliability_dfs[[i]]$Time)) { #if the time variable is a character...
@@ -101,9 +98,7 @@ for (i in 1:(length(reliability_df_names)-1)) { #for all of the reliability dfs
       names(list)[i] <- df_name #name the df
       }
       else { #if it has been made already...
-      df1 <- df1 %>% dplyr::left_join(reliability_dfs[[i+1]], by = c("Tier", "Participant", "Time")) #left join the next coder name to the df that was made above
-      list[[i]] <- assign(df_name, df1, envir=.GlobalEnv) #assign to the global envir
-      names(list)[i] <- df_name
+      print(paste0("there are more than 2 files for participant ", str_sub(reliability_df_names[i], start=1, end=(stri_locate_first_regex(reliability_df_names[i], "_[A-Z]")[1]-1)), ", only the first 2 being read"))
      } 
   }
 }
@@ -120,42 +115,137 @@ merged_dfs = merged_dfs[-which(sapply(merged_dfs, is.null))]
 
 # Create the individual second agreement/disagreement files
 (1 for each participant_child/parent file) 
-AO_agree
-MB_agree etc
+coders_agree variable as well as relative time
 ```{r}
-#make all the consensus code variables character (they will automatically be, but to avoid the loop below from erroring when some are not filled in currently)
-for (i in 1:length(merged_dfs)) {
-  if (is.logical(merged_dfs[[i]]$`Consensus Code`)) { #if the time variable is a character...
-    merged_dfs[[i]]$`Consensus Code` <- as.character(merged_dfs[[i]]$`Consensus Code`) #convert it to hh:mm:ss and then to numeric
-  }
-}
-
-#create the variables (relative time, binary agree for each code and coder)
+#create the variables (relative time, binary agree for each pair of coders)
 for (df_name in names(merged_dfs)) {
-    merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], across(contains("_code"), ~case_when(
+  #get column names that contain coders' codes
+  coders <- colnames(merged_dfs[[df_name]])[which(str_detect(colnames(merged_dfs[[df_name]]), "_code$"))]
+  #create binary 1/0 agreement variable between each pair of coders
+  merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], coders_agree := case_when(
       #if the string is found in the coder code and consensus code, variable is 1
-      grepl("neutral", .) & grepl("neutral", `Consensus Code`) ~ 1, 
-      grepl("positive", .) & grepl("positive", `Consensus Code`) ~ 1,
-      grepl("dysphoric", .) & grepl("dysphoric", `Consensus Code`) ~ 1,
-      grepl("angry", .) & grepl("angry", `Consensus Code`) ~ 1,
-      grepl("uncodable", .) & grepl("uncodable", `Consensus Code`) ~ 1,
-      grepl("end", .) & grepl("end", `Consensus Code`) ~ 1,
-      grepl("start", .) & grepl("start", `Consensus Code`) ~ 1,
-      is.na(.) | is.na(`Consensus Code`) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
+      grepl("neutral", get(coders[1])) & grepl("neutral", get(coders[2])) ~ 1, 
+      grepl("positive", get(coders[1])) & grepl("positive", get(coders[2])) ~ 1,
+      grepl("dysphoric", get(coders[1])) & grepl("dysphoric", get(coders[2])) ~ 1,
+      grepl("angry", get(coders[1])) & grepl("angry", get(coders[2])) ~ 1,
+      grepl("uncodable", get(coders[1])) & grepl("uncodable", get(coders[2])) ~ 1,
+      grepl("end", get(coders[1])) & grepl("end", get(coders[2])) ~ 1,
+      grepl("start", get(coders[1])) & grepl("start", get(coders[2])) ~ 1,
+      is.na(get(coders[1])) | is.na(get(coders[2])) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
       TRUE ~ 0 #otherwise if none of the above are met, value is 0
-  ), .names = "{col}_agree"), #variable names are <coder initials>_code_agree
+  ), 
   relative_time = round(Time - Time[1], digits=0)) #relative time is Time minus initial time, rounded to nearest integer
-  
-  #select from the merged dfs only the columns we care about   
-  merged_dfs[[df_name]] <- dplyr::select(merged_dfs[[df_name]],
-                                           Tier,
-                                           Participant,
-                                           Time,
-                                           `Consensus Code`,
-                                           contains("_code"),
-                                           relative_time)
+}
+```
+
+## Write individual participant files with binary agreement per code
+Need to write in correct path
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" #path to write the files
+
+#for each entry in the merged_dfs list, write the entry as a .csv called "name_agreement.csv"
+lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]], 
+                                      file = paste0(str_c(path, names(merged_dfs)[i], "_agreement.csv", sep="")),
+                                      row.names = FALSE))
+
+#NULLs output below mean that writing the file was successful 
+```
+
+# Create summary file for each participant
+## Create binary columns for whether each coder indicated a specific code
+These will be used in percent agreement, base rates, and kappas
+% agreement for each code = if 1 in both columns OR if 0 in both columns --> add to number of agreements; if 1 and 0 --> number of disagreements
+Formula = agreements/(sum of all rows, both agreements and disagreements)
+```{r}
+for (df_name in names(merged_dfs)) {
+#get column names that contain coders' codes
+coders <- colnames(merged_dfs[[df_name]])[which(str_detect(colnames(merged_dfs[[df_name]]), "_code$"))]
+#create binary 'did the coder indicate this code' for each code
+merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], 
+   across(ends_with("_code"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}")
+) 
 }
 
+```
+
+## Calculate percent agreement for each participant, total and for each code
+Total = sum of '1's in coders_agree column/sum(!is.na(.))
+each code = sum of 'agreements' in that column divided by total rows that are not NA across both
+```{r}
+calc_reliability_participant <- function(merged_dfs) {
+  list_name <- "participant_summary_dfs"
+  list <- list()
+  for (i in 1:length(merged_dfs)) {
+    #create the final df name
+    final_df_name <- str_c(names(merged_dfs)[i], "_summary", sep="")
+    
+    #get list of coder columns and codes
+    coders <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$"))] 
+    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    
+    #create empty dfs to percent agreements
+    participant_summary_df <- data.frame(matrix(NA, nrow=4, ncol=length(codes))) #rows will be "perc_agree", "kappa", "baserate_c1", "baserate_c2"
+    #columns will be code1, code2, etc 
+    
+    #calculate reliability metrics (percent agreement, kappas, and base rates) put in df
+    for (j in 1:length(codes)){
+        if (codes[j] != "total") { #for all codes except total...
+          coder1_col_name = str_c(codes[j], sub("_code", "", coders[1]), sep="_") #coder1 dummy code column name e.g., neutral_MA
+          coder2_col_name = str_c(codes[j], sub("_code", "", coders[2]), sep="_") #coder2 dummy code column name neutral_CB
+          #percent agreement
+          participant_summary_df[1, j] = (sum(apply(merged_dfs[[i]][,startsWith(colnames(merged_dfs[[i]]), codes[j])]==1, 1, all)) + sum(apply(merged_dfs[[i]][,startsWith(colnames(merged_dfs[[i]]), codes[j])]==0, 1, all)))/sum(apply(!is.na(merged_dfs[[i]][,startsWith(colnames(merged_dfs[[i]]), codes[j])]), 1, all))
+          colnames(participant_summary_df)[j] <- paste0(codes[j]) #name the column "neutral"
+          rownames(participant_summary_df)[1] <- paste0("percent_agree") #name the row "MA_code_agree"
+          
+          #kappas
+          participant_summary_df[2, j] = kappa2(cbind(merged_dfs[[i]][[coder1_col_name]], merged_dfs[[i]][[coder2_col_name]]))$value
+          colnames(participant_summary_df)[j] <- paste0(codes[j])
+          rownames(participant_summary_df)[2] <- paste0("kappa")
+     
+          #base rates for each coder and code
+          participant_summary_df[3, j] = sum(merged_dfs[[i]][[coder1_col_name]], na.rm=T)/sum(!is.na(merged_dfs[[i]][[coder1_col_name]]))
+          rownames(participant_summary_df)[3] <- paste0(str_c("baserate", sub("_code", "", coders[1]), sep="_"))
+          participant_summary_df[4, j] = sum(merged_dfs[[i]][[coder2_col_name]], na.rm=T)/sum(!is.na(merged_dfs[[i]][[coder2_col_name]]))
+          rownames(participant_summary_df)[4] <- paste0(str_c("baserate", sub("_code", "", coders[2]), sep="_"))
+          }
+        else { #do a different procedure for total
+          #percent agreement
+          overall_agree_col <- "coders_agree"
+          participant_summary_df[1, j] = sum(merged_dfs[[i]][[overall_agree_col]], na.rm=T)/sum(!is.na(merged_dfs[[i]][[overall_agree_col]]))
+          colnames(participant_summary_df)[j] <- paste0(codes[j])
+          rownames(participant_summary_df)[1] <- paste0("percent_agree")
+          
+          #total kappa
+          participant_summary_df[2 , j] <- kappa2(cbind(merged_dfs[[i]][[coders[1]]], merged_dfs[[i]][[coders[2]]]))$value #calculate total kappa, add new variable 
+          colnames(participant_summary_df)[j] <- paste0(codes[j])
+          rownames(participant_summary_df)[2] <- paste0("kappa") 
+        }
+      }
+    #create 'coder' first column
+    participant_summary_df <- rownames_to_column(participant_summary_df, var = "statistic")
+    list[[i]] <-  participant_summary_df 
+    names(list)[i] <- final_df_name
+  }
+  #assign the completed list to the global environment
+  assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+calc_reliability_participant(merged_dfs) 
+```
+
+## Write the summary file for each participant
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" #path to write the files
+
+#for each entry in the indiv_dfs kappas and % agreement list, write a .csv
+lapply(1:length(participant_summary_dfs), function(i) write.csv(participant_summary_dfs[[i]], 
+                                      file = paste0(str_c(path, names(participant_summary_dfs)[i], ".csv", sep="")), #call participantid_parent/child_summary
+                                      row.names = FALSE))
 ```
 
 
@@ -163,6 +253,8 @@ for (df_name in names(merged_dfs)) {
 ```{r}
 cols <- c("a", "b", "c", "d")
 indices <- 1:length(cols)
-combn(unique(indices), 2)
+combos <- combn(unique(indices), 2) #each column is the correct index pair you need
+ncol(combos) #number of pair combinations you have, 1:ncol(combos)
+combos[,1] #column 1 combos[1,i] and combos[2,i]
 ```
 
