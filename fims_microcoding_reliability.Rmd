@@ -172,7 +172,7 @@ merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]],
 
 ```
 
-## Calculate percent agreement for each participant, total and for each code
+## Calculate reliability metrics for each participant, total and for each code
 Total = sum of '1's in coders_agree column/sum(!is.na(.))
 each code = sum of 'agreements' in that column divided by total rows that are not NA across both
 ```{r}
@@ -248,13 +248,54 @@ lapply(1:length(participant_summary_dfs), function(i) write.csv(participant_summ
                                       row.names = FALSE))
 ```
 
+# Create summary file across all participants
 
-# Experiment with getting unique coder column combinations
+## Create total df with all participants and coders
+Kappa (total, each code) across all coders and participants
 ```{r}
-cols <- c("a", "b", "c", "d")
-indices <- 1:length(cols)
-combos <- combn(unique(indices), 2) #each column is the correct index pair you need
-ncol(combos) #number of pair combinations you have, 1:ncol(combos)
-combos[,1] #column 1 combos[1,i] and combos[2,i]
+#create a participant id variable, useful when merging across multiple dfs
+for (i in 1:(length(merged_dfs))) {
+  merged_dfs[[i]]$participant_id <- names(merged_dfs)[i] 
+}
+
+#merge the list of dfs to create one really long df
+mega_df <- bind_rows(merged_dfs)
+```
+
+## Subset this into separate dfs for each coder across all participants
+Kappa (total, each code), base rates, percent agreement for each pair of coders across all participants that they coded
+```{r}
+#subset this into separate dfs for each coder
+split_coder_dfs <- function(mega_df) {
+  all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
+  coder_pairs <- combn(unique(1:length(all_coders)), 2)
+  
+  coder_dfs <- list()
+  coder_df_name <- "coder_dfs"
+  
+  for (p in 1:ncol(coder_pairs)){
+    if(nrow(mega_df[!is.na(mega_df[,all_coders[coder_pairs[1, p]]]) & !is.na(mega_df[,all_coders[coder_pairs[2, p]]]),]) >0) { #if there are any rows where both coders' columns are not NA
+      df <- mega_df[!is.na(mega_df[all_coders[coder_pairs[1, p]]]) & !is.na(mega_df[all_coders[coder_pairs[2, p]]]), ] %>% dplyr::select(
+        Tier, 
+        Participant, 
+        participant_id,
+        Time, 
+        relative_time,
+        coders_agree,
+        contains(sub("_code", "", all_coders[coder_pairs[1, p]])),
+        contains(sub("_code", "", all_coders[coder_pairs[2, p]]))
+      )
+      df_name <- paste0(str_c(sub("_code", "", all_coders[coder_pairs[1, p]]), sub("_code", "", all_coders[coder_pairs[2, p]]), "codes", sep="_"))
+      coder_dfs[[p]] <-  df 
+      names(coder_dfs)[p] <- df_name
+    }
+  }
+  assign(coder_df_name, coder_dfs, envir=.GlobalEnv)
+}
+
+split_coder_dfs(mega_df)
+
+#remove the 'null' entries in the list
+coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
 ```
 
