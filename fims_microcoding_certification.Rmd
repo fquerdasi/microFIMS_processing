@@ -437,7 +437,7 @@ path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cer
 
 #for each entry in the indiv_dfs kappas and % agreement list, write a .csv
 lapply(1:length(indiv_dfs), function(i) write.csv(indiv_dfs[[i]], 
-                                      file = paste0(str_c(path, sub("_kappas_allcoders", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
+                                      file = paste0(str_c(path, sub("_%agree_kappas_allcoders", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
                                       row.names = FALSE))
 ```
 
@@ -590,9 +590,9 @@ kappas_allcoders_df <- mutate(kappas_allcoders_df,
       uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
       uncodable_code = ifelse(str_detect(code, "uncodable"), 1, 0),
       neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
-      neg_dys_code = ifelse(str_detect(code, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
+      neg_dys_code = ifelse(str_detect(code, "negative - dysphoric") | str_detect(code, "negative – dysphoric"), 1, 0),
       neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
-      neg_angry_code = ifelse(str_detect(code, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0)
+      neg_angry_code = ifelse(str_detect(code, "negative - angry") | str_detect(code, "negative – angry"), 1, 0)
       )
     
 #create an empty df to hold the kappas

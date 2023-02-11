@@ -249,9 +249,10 @@ lapply(1:length(participant_summary_dfs), function(i) write.csv(participant_summ
 ```
 
 # Create summary file across all participants
-
+## Partition the data
 ## Create total df with all participants and coders
 Kappa (total, each code) across all coders and participants
+Base rates for each coder across all participants
 ```{r}
 #create a participant id variable, useful when merging across multiple dfs
 for (i in 1:(length(merged_dfs))) {
@@ -262,19 +263,20 @@ for (i in 1:(length(merged_dfs))) {
 mega_df <- bind_rows(merged_dfs)
 ```
 
-## Subset this into separate dfs for each coder across all participants
+### Subset mega_df into separate dfs for each coder across all participants
 Kappa (total, each code), base rates, percent agreement for each pair of coders across all participants that they coded
 ```{r}
 #subset this into separate dfs for each coder
 split_coder_dfs <- function(mega_df) {
   all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
-  coder_pairs <- combn(unique(1:length(all_coders)), 2)
+  coder_pairs <- combn(unique(1:length(all_coders)), 2) #get all the unique combinations of coders
   
   coder_dfs <- list()
   coder_df_name <- "coder_dfs"
   
   for (p in 1:ncol(coder_pairs)){
-    if(nrow(mega_df[!is.na(mega_df[,all_coders[coder_pairs[1, p]]]) & !is.na(mega_df[,all_coders[coder_pairs[2, p]]]),]) >0) { #if there are any rows where both coders' columns are not NA
+     #if there are any rows where both coders' columns in the pair are not NA...
+    if(nrow(mega_df[!is.na(mega_df[,all_coders[coder_pairs[1, p]]]) & !is.na(mega_df[,all_coders[coder_pairs[2, p]]]),]) >0) {
       df <- mega_df[!is.na(mega_df[all_coders[coder_pairs[1, p]]]) & !is.na(mega_df[all_coders[coder_pairs[2, p]]]), ] %>% dplyr::select(
         Tier, 
         Participant, 
@@ -299,3 +301,128 @@ split_coder_dfs(mega_df)
 coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
 ```
 
+## Calculate the statistics
+### Calculate base rates for each coder across all coderpairs and participants
+```{r}
+#get list of all coders
+all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
+codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+
+#create empty dfs to percent agreements
+all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+2), ncol=length(codes))) #rows will be "perc_agree", "kappa", "baserate_c1", "baserate_c2"
+#columns will be kappa_allcoders, percent_agree_allcoders, and base_rate for each coder
+
+#calculate base rates for each coder across all participants
+for (j in 1:length(codes)){
+  for (k in 1:length(all_coders)){
+    if (codes[j] != "total") { #for all codes except total...
+    #base rates for each coder and code
+      coder_code_col <- str_c(codes[j], sub("_code", "", all_coders[k]), sep="_")
+      all_summary_df[k, j] = sum(mega_df[[coder_code_col]], na.rm=T)/sum(!is.na(mega_df[[coder_code_col]]))
+      rownames(all_summary_df)[k] <- paste0(str_c("baserate", sub("_code", "", all_coders[k]), sep="_"))
+      colnames(all_summary_df)[j] <- paste0(codes[j])
+    }
+  }
+}
+#rename first column 
+all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
+#rename extra column for 'total' that will get filled in later
+colnames(all_summary_df)[6] <- paste0(codes[6])
+```
+
+### Calculate reliability metrics for each pair of coders, total and for each code
+```{r}
+calc_reliability_coderpair <- function(coder_dfs) {
+  list_name <- "coderpair_sum_dfs"
+  list <- list()
+  for (i in 1:length(coder_dfs)) {
+    #create the final df name
+    final_df_name <- str_c(sub("_codes", "", names(coder_dfs)[i]), "_coderpair", sep="")
+    
+    #get list of coder columns and codes
+    coders <- colnames(coder_dfs[[names(coder_dfs)[i]]])[which(str_detect(colnames(coder_dfs[[names(coder_dfs)[i]]]), "_code$"))] 
+    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    
+    #create empty dfs to percent agreements
+    coderpair_summary_df <- data.frame(matrix(NA, nrow=4, ncol=length(codes))) #rows will be "perc_agree", "kappa", "baserate_c1", "baserate_c2"
+    #columns will be code1, code2, etc 
+    
+    #calculate reliability metrics (percent agreement, kappas, and base rates) put in df
+    for (j in 1:length(codes)){
+        if (codes[j] != "total") { #for all codes except total...
+          coder1_col_name = str_c(codes[j], sub("_code", "", coders[1]), sep="_") #coder1 dummy code column name e.g., neutral_MA
+          coder2_col_name = str_c(codes[j], sub("_code", "", coders[2]), sep="_") #coder2 dummy code column name neutral_CB
+          #percent agreement
+          coderpair_summary_df[1, j] = (sum(apply(coder_dfs[[i]][,startsWith(colnames(coder_dfs[[i]]), codes[j])]==1, 1, all)) + sum(apply(coder_dfs[[i]][,startsWith(colnames(coder_dfs[[i]]), codes[j])]==0, 1, all)))/sum(apply(!is.na(coder_dfs[[i]][,startsWith(colnames(coder_dfs[[i]]), codes[j])]), 1, all))
+          colnames(coderpair_summary_df)[j] <- paste0(codes[j]) #name the column "neutral"
+          rownames(coderpair_summary_df)[1] <- paste0(str_c("percent_agree", sub("_code", "", coders[1]), sub("_code", "", coders[2]), sep="_")) #name the row "MA_code_agree"
+          
+          #kappas
+          coderpair_summary_df[2, j] = kappa2(cbind(coder_dfs[[i]][[coder1_col_name]], coder_dfs[[i]][[coder2_col_name]]))$value
+          colnames(coderpair_summary_df)[j] <- paste0(codes[j])
+          rownames(coderpair_summary_df)[2] <- paste0(str_c("kappa", sub("_code", "", coders[1]), sub("_code", "", coders[2]), sep="_"))
+     
+          #base rates for each coder and code
+          coderpair_summary_df[3, j] = sum(coder_dfs[[i]][[coder1_col_name]], na.rm=T)/sum(!is.na(coder_dfs[[i]][[coder1_col_name]]))
+          rownames(coderpair_summary_df)[3] <- paste0(str_c("baserate_", sub("_code", "", coders[1]), "_w", sub("_code", "", coders[2]), sep=""))
+          coderpair_summary_df[4, j] = sum(coder_dfs[[i]][[coder2_col_name]], na.rm=T)/sum(!is.na(coder_dfs[[i]][[coder2_col_name]]))
+          rownames(coderpair_summary_df)[4] <- paste0(str_c("baserate_", sub("_code", "", coders[2]), "_w", sub("_code", "", coders[1]),sep=""))
+          }
+        else { #do a different procedure for total
+          #percent agreement
+          overall_agree_col <- "coders_agree"
+          coderpair_summary_df[1, j] = sum(coder_dfs[[i]][[overall_agree_col]], na.rm=T)/sum(!is.na(coder_dfs[[i]][[overall_agree_col]]))
+          colnames(coderpair_summary_df)[j] <- paste0(codes[j])
+          rownames(coderpair_summary_df)[1] <- paste0(str_c("percent_agree", sub("_code", "", coders[1]), sub("_code", "", coders[2]), sep="_"))
+          
+          #total kappa
+          coderpair_summary_df[2 , j] <- kappa2(cbind(coder_dfs[[i]][[coders[1]]], coder_dfs[[i]][[coders[2]]]))$value #calculate total kappa, add new variable 
+          colnames(coderpair_summary_df)[j] <- paste0(codes[j])
+          rownames(coderpair_summary_df)[2] <- paste0(str_c("kappa", sub("_code", "", coders[1]), sub("_code", "", coders[2]), sep="_"))
+        }
+      }
+    #create 'coder' first column
+    coderpair_summary_df <- rownames_to_column(coderpair_summary_df, var = "statistic")
+    list[[i]] <-  coderpair_summary_df 
+    names(list)[i] <- final_df_name
+  }
+  #assign the completed list to the global environment
+  assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+calc_reliability_coderpair(coder_dfs) 
+
+#combine the list of dfs into one
+coderpairs_summary <- bind_rows(coderpair_sum_dfs)
+```
+
+### Calculate reliability across all coders and participants
+NOTE: cannot calculate all kappa the same as for the certification script becuase we have a bunch of coder pairs rather than a bunch of coders compared against consensus codes
+```{r}
+#calculate reliability
+for (j in 1:length(codes)){
+  #kappa_allcoders for each code can be calculated as the average kappa across all coder pairs
+  all_summary_df[5, j] = mean(coderpairs_summary[grepl("kappa", coderpairs_summary$statistic), j+1])
+  rownames(all_summary_df)[5] = "kappa_allcoders"
+  
+  #percent agreement as average of percent agreement across all coder pairs
+  all_summary_df[6, j] = mean(coderpairs_summary[grepl("percent", coderpairs_summary$statistic), j+1])
+  rownames(all_summary_df)[6] = "percent_agree_allcoders"
+}
+
+all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
+```
+
+## Combine all of the summary across all participants statistics into one df
+```{r}
+final_summary <- coderpairs_summary %>% bind_rows(all_summary_df)
+```
+
+## Write final summary file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
+
+#write the summary file csv
+write_csv(final_summary, str_c(path, "all_summary.csv"))
+```
