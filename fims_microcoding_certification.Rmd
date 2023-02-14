@@ -437,7 +437,7 @@ path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cer
 
 #for each entry in the indiv_dfs kappas and % agreement list, write a .csv
 lapply(1:length(indiv_dfs), function(i) write.csv(indiv_dfs[[i]], 
-                                      file = paste0(str_c(path, sub("_%agree_kappas_allcoders", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
+                                      file = paste0(str_c(path, sub("_%agree", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
                                       row.names = FALSE))
 ```
 

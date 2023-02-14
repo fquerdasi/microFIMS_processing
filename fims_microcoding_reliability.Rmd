@@ -81,7 +81,7 @@ for (i in 1:length(reliability_dfs)) {
 }
 
 #get the names of all the dataframes
-reliability_df_names <- names(reliability_dfs) #names of the coder dfs
+reliability_df_names <- sort(names(reliability_dfs)) #names of the coder dfs
 
 #for all of the names_of_dfs, if cons_df_names contains the name, then full_join it with the df that contains it on Tier and Time
 merge_reliability_dfs <- function(reliability_dfs, reliability_df_names) {
@@ -93,7 +93,7 @@ for (i in 1:(length(reliability_df_names)-1)) { #for all of the reliability dfs
       #assign the name of the df to be the name of the first file minus coder initials
       df_name <- str_sub(reliability_df_names[i], start=1, end=(stri_locate_first_regex(reliability_df_names[i], "_[A-Z]")[1]-1))
       if (!exists(df_name)) { #if the df has not already been made...
-      df1 <- reliability_dfs[[i]] %>% dplyr::left_join(reliability_dfs[[i+1]], by = c("Tier", "Participant", "Time")) 
+      df1 <- reliability_dfs[[reliability_df_names[i]]] %>% dplyr::left_join(reliability_dfs[[reliability_df_names[i+1]]], by = c("Tier", "Participant", "Time")) 
       list[[i]] <- assign(df_name, df1, envir=.GlobalEnv) #assign the df to the global environment (need to do for this loop so that next time it runs can tell if it was made already or not)
       names(list)[i] <- df_name #name the df
       }
@@ -325,7 +325,7 @@ for (j in 1:length(codes)){
   }
 }
 #rename first column 
-all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
+#all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
 #rename extra column for 'total' that will get filled in later
 colnames(all_summary_df)[6] <- paste0(codes[6])
 ```
@@ -403,12 +403,12 @@ NOTE: cannot calculate all kappa the same as for the certification script becuas
 #calculate reliability
 for (j in 1:length(codes)){
   #kappa_allcoders for each code can be calculated as the average kappa across all coder pairs
-  all_summary_df[5, j] = mean(coderpairs_summary[grepl("kappa", coderpairs_summary$statistic), j+1])
-  rownames(all_summary_df)[5] = "kappa_allcoders"
+  all_summary_df[length(all_coders)+1, j] = mean(coderpairs_summary[grepl("kappa", coderpairs_summary$statistic), j+1])
+  rownames(all_summary_df)[length(all_coders)+1] = "kappa_allcoders"
   
   #percent agreement as average of percent agreement across all coder pairs
-  all_summary_df[6, j] = mean(coderpairs_summary[grepl("percent", coderpairs_summary$statistic), j+1])
-  rownames(all_summary_df)[6] = "percent_agree_allcoders"
+  all_summary_df[length(all_coders)+2, j] = mean(coderpairs_summary[grepl("percent", coderpairs_summary$statistic), j+1])
+  rownames(all_summary_df)[length(all_coders)+2] = "percent_agree_allcoders"
 }
 
 all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
