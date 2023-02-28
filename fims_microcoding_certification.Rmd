@@ -635,3 +635,27 @@ path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cer
 write_csv(summary_final, str_c(path, "all_summary.csv"))
 ```
 
+# Calculate number of participants for each coder and across all coders
+```{r}
+#select columns from each df to start with
+number_ps_start <- mega_df %>% dplyr::select(participant_id, all_of(newest_codes_mega))
+    
+#create the long df with coders' list of codes stacked on top of each other
+number_ps <- reshape2::melt(number_ps_start, id=c("participant_id"))
+
+np_summary <- number_ps %>% filter(!is.na(value)) %>%group_by(variable) %>% summarise(number_participants = n_distinct(participant_id)) #all coders coded 6 participants
+
+#add row which is total number of unique participants
+np_summary<- np_summary %>% 
+  add_row(variable = "all_coders", number_participants = length(unique(mega_df$participant_id))) %>% 
+  dplyr::rename(coder = variable)
+```
+
+## Write number of participants file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/"
+
+#write the summary file csv
+write_csv(np_summary, str_c(path, "number_participants.csv"))
+```
+
