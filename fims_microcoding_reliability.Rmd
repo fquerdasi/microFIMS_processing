@@ -265,7 +265,6 @@ for (i in 1:(length(merged_dfs))) {
 #merge the list of dfs to create one really long df
 mega_df <- bind_rows(merged_dfs)
 
-length(unique(mega_df$participant_id))
 ```
 
 ### Subset mega_df into separate dfs for each coder across all participants
@@ -306,16 +305,27 @@ split_coder_dfs(mega_df)
 coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
 ```
 
+## Subset mega_df into parent and child participants
+```{r}
+parents <- mega_df %>% dplyr::filter(Participant=="Parent") %>% dplyr::select(where(~sum(!is.na(.x)) > 0)) #remove columns for coders that are all NA (they didn't code parent files)
+
+children <- mega_df %>% dplyr::filter(Participant=="Child") %>% dplyr::select(where(~sum(!is.na(.x)) > 0))
+```
+
+
 ## Calculate the statistics
-### Calculate base rates for each coder across all coderpairs and participants
+### Calculate base rates for each coder across all coderpairs and participants, and within all parent and all child files
 ```{r}
 #get list of all coders
 all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
+child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
+parent_coders <- colnames(parents)[which(str_detect(colnames(parents), "_code$"))] 
 codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
 
 #create empty dfs to percent agreements
-all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+2), ncol=length(codes))) #rows will be "perc_agree", "kappa", "baserate_c1", "baserate_c2"
-#columns will be kappa_allcoders, percent_agree_allcoders, and base_rate for each coder
+all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+2), ncol=length(codes))) #+2 rows for kappa_allcoders and percent_agree_allcoders
+parent_summary_df <- data.frame(matrix(NA, nrow=(length(parent_coders)+2), ncol=length(codes)))
+child_summary_df <- data.frame(matrix(NA, nrow=(length(child_coders)+2), ncol=length(codes)))
 
 #calculate base rates for each coder across all participants
 for (j in 1:length(codes)){
@@ -329,10 +339,60 @@ for (j in 1:length(codes)){
     }
   }
 }
+
+#calcuate base rates for each coder across all parent files
+for (j in 1:length(codes)){
+  for (k in 1:length(parent_coders)){
+    if (codes[j] != "total") { #for all codes except total...
+    #base rates for each coder and code
+      coder_code_col <- str_c(codes[j], sub("_code", "", parent_coders[k]), sep="_")
+      parent_summary_df[k, j] = sum(parents[[coder_code_col]], na.rm=T)/sum(!is.na(parents[[coder_code_col]]))
+      rownames(parent_summary_df)[k] <- paste0(str_c("baserate", sub("_code", "", parent_coders[k]), sep="_"))
+      colnames(parent_summary_df)[j] <- paste0(codes[j])
+    }
+  }
+}
+
+#calcuate base rates for each coder across all child files
+for (j in 1:length(codes)){
+  for (k in 1:length(child_coders)){
+    if (codes[j] != "total") { #for all codes except total...
+    #base rates for each coder and code
+      coder_code_col <- str_c(codes[j], sub("_code", "", child_coders[k]), sep="_")
+      child_summary_df[k, j] = sum(children[[coder_code_col]], na.rm=T)/sum(!is.na(children[[coder_code_col]]))
+      rownames(child_summary_df)[k] <- paste0(str_c("baserate", sub("_code", "", child_coders[k]), sep="_"))
+      colnames(child_summary_df)[j] <- paste0(codes[j])
+    }
+  }
+}
+
 #rename first column 
 #all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
 #rename extra column for 'total' that will get filled in later
 colnames(all_summary_df)[6] <- paste0(codes[6])
+colnames(parent_summary_df)[6] <- paste0(codes[6])
+colnames(child_summary_df)[6] <- paste0(codes[6])
+
+#for parent and child summaries, calculate average base rate for each code
+parent_summary_df[length(parent_coders)+1, ] <- colMeans(parent_summary_df, na.rm=TRUE)
+child_summary_df[length(child_coders)+1, ] <- colMeans(child_summary_df, na.rm=TRUE)
+
+rownames(parent_summary_df)[length(parent_coders)+1] <- "averge_base_rate"
+rownames(child_summary_df)[length(child_coders)+1] <- "averge_base_rate"
+```
+
+### Calculate overall percent agreement and kappa for parent_summary and child_summary
+```{r}
+#get list of coder pairs
+coderpairs <- names(coder_dfs)
+
+#extract two coder names from each pair, put in dataframe: coder1, coder2
+
+#total percent agreement: sum of coders_agree/total nrow coders_agree
+#percent agreement for each code: (<code>_coder1 + <code>_coder2)/(sum of rows where these two cols aren't NA) -- for each coderpair
+#OR create "<code>_agree" column for each code and then treat those as total (but only works if 2 coders coded each second)
+
+#kappa -- not sure how to do this if not by coder pair
 ```
 
 ### Calculate reliability metrics for each pair of coders, total and for each code
