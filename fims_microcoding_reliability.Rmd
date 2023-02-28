@@ -73,6 +73,9 @@ read_reliability_files(fl)
 
 # Merge reliability files by participant
 ```{r}
+#filter out "" entries that got fed in somehow 
+reliability_dfs <- reliability_dfs[which(names(reliability_dfs)!="")]
+
 #change the time variable to be double in all dfs
 for (i in 1:length(reliability_dfs)) {
   if (is.character(reliability_dfs[[i]]$Time)) { #if the time variable is a character...
@@ -261,6 +264,8 @@ for (i in 1:(length(merged_dfs))) {
 
 #merge the list of dfs to create one really long df
 mega_df <- bind_rows(merged_dfs)
+
+length(unique(mega_df$participant_id))
 ```
 
 ### Subset mega_df into separate dfs for each coder across all participants
@@ -426,3 +431,33 @@ path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_rel
 #write the summary file csv
 write_csv(final_summary, str_c(path, "all_summary.csv"))
 ```
+
+# Calculate number of participants for each coder pair and across all coder pairs
+```{r}
+#add number of participants in each coder pair
+calc_num_participants <- function(coder_dfs) {
+  numps_summary_df <- data.frame(matrix(NA, nrow=(length(coder_dfs)+1), ncol=1))
+  for (i in 1:length(coder_dfs)) {
+    numps_summary_df[i,1] = length(unique(coder_dfs[[i]]$participant_id))
+    rownames(numps_summary_df)[i] <- paste0(names(coder_dfs[i]))
+  }
+  colnames(numps_summary_df) <- "number_participants"
+  assign("n_ps_summary", numps_summary_df, envir=.GlobalEnv)
+}
+
+calc_num_participants(coder_dfs)
+
+#add number of participants across all coder pairs
+n_ps_summary[length(coder_dfs)+1, 1] <- length(unique(mega_df$participant_id))
+rownames(n_ps_summary)[length(coder_dfs)+1] <- "all_coders"
+n_ps_summary <- rownames_to_column(n_ps_summary, var = "coderpair")
+```
+
+## Write number of participants file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
+
+#write the summary file csv
+write_csv(n_ps_summary, str_c(path, "number_participants.csv"))
+```
+
