@@ -239,6 +239,11 @@ calc_reliability_participant <- function(merged_dfs) {
 
 #apply the function
 calc_reliability_participant(merged_dfs) 
+
+#diagnosing error: are there NAs in any merged_df?
+# for (i in 1:length(merged_dfs)) {
+#   print(paste0("there are ", sum(is.na(merged_dfs[[i]])), " NAs in ", names(merged_dfs[i])))
+# }
 ```
 
 ## Write the summary file for each participant
@@ -389,10 +394,8 @@ coderpairs <- names(coder_dfs)
 #extract two coder names from each pair, put in dataframe: coder1, coder2
 
 #total percent agreement: sum of coders_agree/total nrow coders_agree
-#percent agreement for each code: (<code>_coder1 + <code>_coder2)/(sum of rows where these two cols aren't NA) -- for each coderpair
-#OR create "<code>_agree" column for each code and then treat those as total (but only works if 2 coders coded each second)
+#percent agreement for each code: recode all coders into coder1, coder2 (will work if only 2 coders coded each person), then create the "neutral_coder1", "neutral_coder2" etc. vars, then do the basic kappa and percent agreement calcs
 
-#kappa -- not sure how to do this if not by coder pair
 ```
 
 ### Calculate reliability metrics for each pair of coders, total and for each code
