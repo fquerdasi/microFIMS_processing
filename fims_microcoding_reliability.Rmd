@@ -159,6 +159,7 @@ lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]],
 These will be used in percent agreement, base rates, and kappas
 % agreement for each code = if 1 in both columns OR if 0 in both columns --> add to number of agreements; if 1 and 0 --> number of disagreements
 Formula = agreements/(sum of all rows, both agreements and disagreements)
+
 ```{r}
 for (df_name in names(merged_dfs)) {
 #get column names that contain coders' codes
@@ -169,7 +170,8 @@ merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]],
    across(ends_with("_code"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
    across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
    across(ends_with("_code"), ~ifelse(grepl("dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}")
+   across(ends_with("_code"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("angry", .) | grepl("dysphoric", .), 1, 0), .names="gen_neg_{sub('_code', '', col)}")
 ) 
 }
 
@@ -188,7 +190,7 @@ calc_reliability_participant <- function(merged_dfs) {
     
     #get list of coder columns and codes
     coders <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$"))] 
-    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg","total")
     
     #create empty dfs to percent agreements
     participant_summary_df <- data.frame(matrix(NA, nrow=4, ncol=length(codes))) #rows will be "perc_agree", "kappa", "baserate_c1", "baserate_c2"
@@ -241,9 +243,9 @@ calc_reliability_participant <- function(merged_dfs) {
 calc_reliability_participant(merged_dfs) 
 
 #diagnosing error: are there NAs in any merged_df?
-# for (i in 1:length(merged_dfs)) {
-#   print(paste0("there are ", sum(is.na(merged_dfs[[i]])), " NAs in ", names(merged_dfs[i])))
-# }
+for (i in 1:length(merged_dfs)) {
+  print(paste0("there are ", sum(is.na(merged_dfs[[i]])), " NAs in ", names(merged_dfs[i])))
+}
 ```
 
 ## Write the summary file for each participant
@@ -325,7 +327,7 @@ children <- mega_df %>% dplyr::filter(Participant=="Child") %>% dplyr::select(wh
 all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
 child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
 parent_coders <- colnames(parents)[which(str_detect(colnames(parents), "_code$"))] 
-codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg" ,"total")
 
 #create empty dfs to percent agreements
 all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+2), ncol=length(codes))) #+2 rows for kappa_allcoders and percent_agree_allcoders
@@ -374,9 +376,9 @@ for (j in 1:length(codes)){
 #rename first column 
 #all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
 #rename extra column for 'total' that will get filled in later
-colnames(all_summary_df)[6] <- paste0(codes[6])
-colnames(parent_summary_df)[6] <- paste0(codes[6])
-colnames(child_summary_df)[6] <- paste0(codes[6])
+colnames(all_summary_df)[7] <- paste0(codes[7])
+colnames(parent_summary_df)[7] <- paste0(codes[7])
+colnames(child_summary_df)[7] <- paste0(codes[7])
 
 #for parent and child summaries, calculate average base rate for each code
 parent_summary_df[length(parent_coders)+1, ] <- colMeans(parent_summary_df, na.rm=TRUE)
@@ -409,7 +411,7 @@ calc_reliability_coderpair <- function(coder_dfs) {
     
     #get list of coder columns and codes
     coders <- colnames(coder_dfs[[names(coder_dfs)[i]]])[which(str_detect(colnames(coder_dfs[[names(coder_dfs)[i]]]), "_code$"))] 
-    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg", "total")
     
     #create empty dfs to percent agreements
     coderpair_summary_df <- data.frame(matrix(NA, nrow=4, ncol=length(codes))) #rows will be "perc_agree", "kappa", "baserate_c1", "baserate_c2"

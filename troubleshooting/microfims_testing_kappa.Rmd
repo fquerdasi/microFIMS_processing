@@ -1,0 +1,48 @@
+---
+title: "microfims_testing"
+author: "Fran Querdasi"
+date: "2023-04-05"
+output: html_document
+---
+Use the tutorial from https://www.andywills.info/rminr/irr.html#:~:text=To%20calculate%20Cohen's%20kappa%20in,kappa2%20from%20the%20irr%20package.&text=The%20key%20result%20here%20is%20Kappa%20which%20is%20your%20Cohen's,higher%20or%20lower%20than%20this) to test out functionality of kappa2() from irr package. 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+library(tidyverse)
+library(irr)
+library(psych)
+```
+
+## Load data
+```{r}
+friends <- read_csv("irr.csv")
+```
+
+# Select rater columns
+```{r}
+ratings <- friends %>% dplyr::select(rater1, rater2)
+kappa2(ratings)
+
+#try subsetting columns by cbind
+kappa2(cbind(friends[["rater1"]], friends[["rater2"]]))$value #same value as with select
+
+#try using cohen.kappa function
+test <- cohen.kappa(x = cbind(friends[["rater1"]], friends[["rater2"]]))
+test1 <- cohen.kappa(x = cbind(friends[["rater1"]], friends[["rater2"]]))$kappa
+```
+
+# try reading in mbb 2 111
+```{r}
+mbb <- read_csv("../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/MBB_2_111_parent_agreement.csv")
+
+mbb_ratings <- mbb %>% dplyr::select(AO_code, JJ_code)
+kappa2(mbb_ratings)
+kappa2(cbind(mbb_ratings[["AO_code"]], mbb_ratings[["JJ_code"]]))$value
+
+cohen.kappa(x = cbind(mbb_ratings[["AO_code"]], mbb_ratings[["JJ_code"]]))$kappa
+```
+

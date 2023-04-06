@@ -48,7 +48,9 @@ coders_codes <- "../../../../Lab/Video_coding/FIMS_Micro" #overall directory whe
 multiplesheets(consensus_codes, "cons_codes") #load the consensus codes as a list of dfs, each df is a id_parent or _child
 
 #get all of the .txt files from within the overall directory
-fl <- list.files(path=coders_codes, pattern = "*.txt", recursive=TRUE, full.names = TRUE) #this will output a list of the files
+dirs = list.dirs(coders_codes)
+dirs_use = grep('fims_micro_affect', dirs, value = TRUE)
+fl <- list.files(path=dirs_use, pattern = "*.txt", recursive=TRUE, full.names = TRUE) #this will output a list of the files
 
 #get a list of empty files from df to exclude for reading in (otherwise r with throw an error)
 empty <- fl[file.size(fl) == 0L]
@@ -182,7 +184,7 @@ for (df_name in names(merged_dfs)) {
 
 ## Write individual participant files with binary agreement per code
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/" #path to write the files
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_affect/" #path to write the files
 
 #for each entry in the merged_dfs list, write the entry as a .csv called "name_agreement.csv"
 lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]], 
@@ -433,7 +435,7 @@ indiv_dfs <- map2(indiv_dfs_test, baserate_dfs, dplyr::full_join, by = "coder")
 
 ## Write the summary files for each participant
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/"
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_affect/"
 
 #for each entry in the indiv_dfs kappas and % agreement list, write a .csv
 lapply(1:length(indiv_dfs), function(i) write.csv(indiv_dfs[[i]], 
@@ -629,7 +631,7 @@ summary_final <- mega_df_summary_t %>%
 
 ## Write summary file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/"
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_affect/"
 
 #write the summary file csv
 write_csv(summary_final, str_c(path, "all_summary.csv"))
@@ -653,7 +655,7 @@ np_summary<- np_summary %>%
 
 ## Write number of participants file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/"
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_affect/"
 
 #write the summary file csv
 write_csv(np_summary, str_c(path, "number_participants.csv"))
