@@ -1,0 +1,38 @@
+/** calculating kappa from test data**/data kappa;
+set irr;
+if rater1 = "Stage 0" then rater1 = 0;
+if rater2 = "Stage 0" then rater2 = 0;
+if rater1 = "Stage 1" then rater1 = 1;
+if rater2 = "Stage 1" then rater2 = 1;
+if rater1 = "Stage 2" then rater1 = 2;
+if rater2 = "Stage 2" then rater2 = 2;
+if rater1 = "Stage 3" then rater1= 3;
+if rater2 = "Stage 3" then rater2 = 3;
+if rater1 = "Stage 4" then rater1 = 4;
+if rater2 = "Stage 4" then rater2 = 4;
+run;
+
+data kappa;
+set kappa;
+rater1_num = input (rater1,8.);
+rater2_num = input (rater2, 8.);
+drop rater1 rater2;
+run;
+
+data kappa;
+set kappa;
+if _n_=1 then do;
+rater1_num = 4;
+rater2_num = 4;
+weight = 0;
+output;
+end;
+set kappa;
+weight = 1;
+output;
+run;
+proc freq data=kappa;
+tables rater1_num*rater2_num;
+test kappa;
+weight weight/zeros;
+run;
