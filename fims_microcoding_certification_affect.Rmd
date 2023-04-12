@@ -281,6 +281,8 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
       across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - dysphoric") | str_detect(., "negative – dysphoric"), 1, 0), .names="neg_dys_{col}"),
       neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
       across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - angry") | str_detect(., "negative – angry"), 1, 0), .names="neg_angry_{col}"),
+      across(contains("_code") & !contains("agree"), ~ifelse(grepl("angry", .) | grepl("dysphoric", .), 1, 0), .names="gen_neg_{col}"),
+      gen_neg_consens = ifelse(str_detect(`Consensus Code`, "angry") | str_detect(`Consensus Code`, "dysphoric"), 1, 0)
       )
     
     #get a list of coder initials and list of codes

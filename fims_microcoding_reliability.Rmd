@@ -399,14 +399,6 @@ each code will have kappa, perc_agree, presence_agree, base_rate_coder1, base_ra
 neutral (#1) will be neutral_perc_agree (1), neutral_presence_agree (2), neutral_kappa (3), base_rate_coder1 (4), case_rate_coder2 (5)
 positive (#2) will be positve_perc_agree (6), positive_presence_agree (7), positive_kappa (8), 9, 10
 uncodable (#3) will be 11, 12, 13, 14, 15
-16, 17, 18, 19, 20
-
-1 -- 3 (2+5*0)
-2 -- 7 (2+ 5*1)
-3 -- 13 
-4 -- 18
-
-5*6 + 2 = 32
 ```{r}
 #subset merged_dfs into child dfs and parent dfs
 child_dfs <- merged_dfs[grepl("child",names(merged_dfs))]
@@ -507,12 +499,66 @@ overall
 ```{r}
 #get list of coder pairs
 coderpairs <- names(coder_dfs)
+child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
+parent_coders <- colnames(parents)[which(str_detect(colnames(parents), "_code$"))] 
+child_coderpairs <- coderpairs[which(grepl(substr(child_coders,1, 3), substr(coderpairs, 1, 5)
+))]
 
-#extract two coder names from each pair, put in dataframe: coder1, coder2
+string_matching <- function(list1, list2) {
+  # Initialize an empty vector to store matching strings
+  matching_strings <- c()
+  # Iterate through each string in list1 (coderpairs)
+  for (string1 in list1) {
+    # Iterate through each string in list2 (child coders)
+    for (string2 in list2) {
+      # Check if string2 is a substring of string1
+      if (grepl(string2, string1)) {
+        # Append string1 to the matching_strings vector
+        matching_strings <- c(matching_strings, string2)
+        break  # Break out of the inner loop once a match is found
+      }
+    }
+  }
+  # Return the vector of matching strings
+  return(matching_strings)
+}
+
+child_coderpairs <- string_matching(coderpairs, child_coders)
+parent_coderpairs <- string_matching(coderpairs, parent_coders)
+print(parent_coderpairs)
+
+#extract coder1 and coder2 from each df based on pair
+extract_coders <- function(coderpairs, coder_num) {
+  coderx <- c()
+  for (i in 1:length(coderpairs)) {
+    coderx <- c(coderx, strsplit(coderpairs[i], "[_]")[[1]][coder_num])
+  }
+  return(coderx)
+}
+
+child_coder1 <- str_c(extract_coders(child_coderpairs, 1), "_code", sep="") 
+child_coder2 <- str_c(extract_coders(child_coderpairs, 2), "_code", sep="") 
+parent_coder1 <- str_c(extract_coders(parent_coderpairs, 1), "_code", sep="")
+parent_coder2 <- str_c(extract_coders(parent_coderpairs, 2), "_code", sep="")
+
+
+#percent agreement for each code: recode all coders into coder1, coder2 (will work if only 2 coders coded each person)
+children <- children %>%
+  mutate(coder1 = ifelse(rowSums(!is.na(across(all_of(child_coder1)))) > 0,
+                          coalesce(!!!rlang::syms(child_coder1)),
+                          NA),
+         coder2 = ifelse(rowSums(!is.na(across(all_of(child_coder2)))) > 0,
+                          coalesce(!!!rlang::syms(child_coder2)),
+                          NA)) 
+parents <- parents %>%
+  mutate(coder1 = ifelse(rowSums(!is.na(across(all_of(parent_coder1)))) > 0,
+                          coalesce(!!!rlang::syms(parent_coder1)),
+                          NA),
+         coder2 = ifelse(rowSums(!is.na(across(all_of(parent_coder2)))) > 0,
+                          coalesce(!!!rlang::syms(parent_coder2)),
+                          NA)) 
 
 #total percent agreement: sum of coders_agree/total nrow coders_agree
-#percent agreement for each code: recode all coders into coder1, coder2 (will work if only 2 coders coded each person), then create the "neutral_coder1", "neutral_coder2" etc. vars, then do the basic kappa and percent agreement calcs
-
 ```
 
 ## Calculate reliability metrics for each pair of coders, total and for each code
