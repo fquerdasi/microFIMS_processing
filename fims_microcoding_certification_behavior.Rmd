@@ -61,7 +61,7 @@ list_name <- "coder_dfs"
 list <- list()
 for (i in 1:length(fl)) { #for each file in the list
   #if file and folder name match, and the file is not empty...
-  if ((str_match(fl[[i]], "Micro/(.*?)/fims")[2] == str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
+  if ((str_match(fl[[i]], "Micro//(.*?)/fims")[2] == str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
     #get info to add to the dfs
     id_file_name <- str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2] #this is the participant id
     coder_initials <- str_match(fl[[i]], "Micro_(.*?).txt")[2]
@@ -75,10 +75,10 @@ for (i in 1:length(fl)) { #for each file in the list
     names(list)[i] <- df_name
   } else if (fl[[i]] %in% empty) { #else if the file is empty...
     #write a message telling the person that the file name is empty and not being read in
-    print(paste0(str_match(fl[[i]], 'affect/(.*)')[2], " is empty -- not being read into R"))
+    print(paste0(str_match(fl[[i]], 'behavior/(.*)')[2], " is empty -- not being read into R"))
   } else { #if the file and folder name do not match...
     #write a message saying to check naming
-    print(paste0("file ", str_match(fl[[i]], 'behavior/(.*)')[2], " and folder ", str_match(fl[[i]], "Micro/(.*?)/fims")[2], " names do not match, not being read into R now -- please check"))
+    print(paste0("file ", str_match(fl[[i]], 'behavior/(.*)')[2], " and folder ", str_match(fl[[i]], "Micro//(.*?)/fims")[2], " names do not match, not being read into R now -- please check"))
   }
 }
 #assign the list to the global environment
@@ -93,8 +93,8 @@ read_coder_files(fl)
 NOTE: if you run the for function more than once, will get weird errors
 ```{r}
 #remove the null and na entries in the list (from files that were not read in)
-coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
-#coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+#coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
+coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
 
 #change the time variable to be double in all dfs
 for (i in 1:length(coder_dfs)) {
@@ -145,7 +145,7 @@ AO_agree
 MB_agree etc
 ```{r}
 #remove the null entries in the list (from files that were not read in)
-#merged_dfs = merged_dfs[-which(sapply(merged_dfs, is.null))]
+merged_dfs = merged_dfs[-which(sapply(merged_dfs, is.null))]
 
 #make all the consensus code variables character (they will automatically be, but to avoid the loop below from erroring when some are not filled in currently)
 for (i in 1:length(merged_dfs)) {
@@ -220,7 +220,7 @@ create_agreement_dfs <- function(merged_dfs) {
         grepl("active", `Consensus Code`, ignore.case=T) ~ "active social engagement behavior",
         grepl("positive", `Consensus Code`, ignore.case=T) ~ "positive social communication behavior",
         grepl("withdraw", `Consensus Code`, ignore.case=T) ~ "withdrawal from interaction",
-        grepl("off",  `Consensus Code`, ignore.case=T) ~ "off-task behavior"
+        grepl("off",  `Consensus Code`, ignore.case=T) ~ "off-task behavior",
         grepl("uncodable", `Consensus Code`, ignore.case=T) ~ "uncodable",
         grepl("auto", `Consensus Code`, ignore.case=T) ~ "non-autonomous behavior",
         grepl("reject", `Consensus Code`, ignore.case=T) ~ "rejecting others"
@@ -333,7 +333,7 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
     #create 'coder' first column
     kappas <- rownames_to_column(kappas, var = "coder")
     base_rates_coders <- rownames_to_column(base_rates_coders, var="coder")
-    base_rates_coders <- dplyr::select(base_rates_coders, -X6)
+    base_rates_coders <- dplyr::select(base_rates_coders, -X9)
     
     #calculate base rates for consensus codes, bind rows to the base_rate_coders df
     codes_minus_total <- codes[1:length(codes)-1] #get a list of codes except total 
@@ -366,7 +366,7 @@ create_kappa_baserates_dfs(merged_dfs)
 ```
 
 ## Calculate kappa across all coders for each participant
-
+Why does this not have percent agreement? 
 ```{r}
 create_kappa_allcoder_dfs <- function(merged_dfs) {
   list_name_kappa_allc <- "kappa_allcoder_dfs"
@@ -388,22 +388,22 @@ create_kappa_allcoder_dfs <- function(merged_dfs) {
     #each kappa code: add to that df the columns you created with 0 and 1 for each code above
     #("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
     kappas_allcoders_df <- mutate(kappas_allcoders_df,
-          neutral_code = ifelse(str_detect(code, regex("neutral", ignore.case=TRUE)), 1, 0),
-          neutral_consens = ifelse(str_detect(`Consensus Code`, regex("neutral", ignore.case=TRUE)), 1, 0),
-          active_code = ifelse(str_detect(code, regex("active", ignore.case=TRUE)), 1, 0),
-          active_consens = ifelse(str_detect(`Consensus Code`, regex("active", ignore.case=TRUE)), 1, 0),
-          positive_consens = ifelse(str_detect(`Consensus Code`,regex("positive", ignore.case=TRUE)), 1, 0),
-          positive_code = ifelse(str_detect(code, regex("positive", ignore.case=TRUE)), 1, 0),
-          uncodable_consens = ifelse(str_detect(`Consensus Code`, regex("uncodable", ignore.case=TRUE)), 1, 0),
-          uncodable_code = ifelse(str_detect(code, regex("uncodable", ignore.case=TRUE)), 1, 0),
-          withdraw_consens = ifelse(str_detect(`Consensus Code`, regex("withdraw", ignore.case=TRUE)), 1, 0),
-          withdraw_code = ifelse(str_detect(code, regex("withdraw", ignore.case=TRUE)), 1, 0),
-          offtask_consens = ifelse(str_detect(`Consensus Code`, regex("off", ignore.case=TRUE)), 1, 0),
-          offtask_code = ifelse(str_detect(code, regex("off", ignore.case=TRUE)), 1, 0),
-          nonauto_consens = ifelse(str_detect(`Consensus Code`, regex("auto", ignore.case=TRUE)), 1, 0),
-          nonauto_code = ifelse(str_detect(code, regex("auto", ignore.case=TRUE)), 1, 0),
-          reject_consens = ifelse(str_detect(`Consensus Code`, regex("reject", ignore.case=TRUE)), 1, 0),
-          reject_code = ifelse(str_detect(code, regex("reject", ignore.case=TRUE)), 1, 0)
+          neutral_code = ifelse(grepl("neutral", code, ignore.case=T), 1, 0),
+          neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case=T), 1, 0),
+          active_code = ifelse(grepl("active", code, ignore.case=T), 1, 0),
+          active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case=T), 1, 0),
+          positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case=T), 1, 0),
+          positive_code = ifelse(grepl("positive", code, ignore.case=T), 1, 0),
+          uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`, ignore.case=T), 1, 0),
+          uncodable_code = ifelse(grepl("uncodable", code, ignore.case=T), 1, 0),
+          withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case=T), 1, 0),
+          withdraw_code = ifelse(grepl("withdraw", code, ignore.case=T), 1, 0),
+          offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case=T), 1, 0),
+          offtask_code = ifelse(grepl("off", code, ignore.case=T), 1, 0),
+          nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case=T), 1, 0),
+          nonauto_code = ifelse(grepl("auto", code, ignore.case=T), 1, 0),
+          reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case=T), 1, 0),
+          reject_code = ifelse(grepl("reject", code, ignore.case=T), 1, 0)
           )
     
     #create an empty df to hold the kappas
@@ -490,7 +490,7 @@ mega_df <- mega_df %>%
     grepl("active", `Consensus Code`, ignore.case=T) ~ "active social engagement behavior",
     grepl("positive", `Consensus Code`, ignore.case=T) ~ "positive social communication behavior",
     grepl("withdraw", `Consensus Code`, ignore.case=T) ~ "withdrawal from interaction",
-    grepl("off",  `Consensus Code`, ignore.case=T) ~ "off-task behavior"
+    grepl("off",  `Consensus Code`, ignore.case=T) ~ "off-task behavior",
     grepl("uncodable", `Consensus Code`, ignore.case=T) ~ "uncodable",
     grepl("auto", `Consensus Code`, ignore.case=T) ~ "non-autonomous behavior",
     grepl("reject", `Consensus Code`, ignore.case=T) ~ "rejecting others"
@@ -527,7 +527,7 @@ mega_df <- mutate(mega_df,
       neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case=TRUE), 1, 0), 
       #active
       active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case=TRUE), 1, 0), 
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("active", ., ignore.case=TRUE), 1, 0), .names="positive_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("active", ., ignore.case=TRUE), 1, 0), .names="active_{sub('_code', '', col)}"),
       #positive
       positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case=TRUE), 1, 0),
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
@@ -555,13 +555,13 @@ base_rates <- as.data.frame(table(mega_df$cons_codes_consol)) %>%
   mutate(base_rate_cons = Freq/sum(!is.na(mega_df$cons_codes_consol)))
 
 # first remember the new column names
-names <- c("active", "neutral", "nonauto", "offtask", "positive", "reject", "total", "uncodable", "withdraw") #ordered alphabetically 
+names <- c("active", "neutral", "nonauto", "offtask", "positive", "reject", "uncodable", "withdraw") #ordered alphabetically 
 # transpose all but the first column (names)
 base_rates_t <- as.data.frame(t(base_rates[,-1]))
 colnames(base_rates_t) <- str_c("baserate", names, sep="_") #assign the column names, "baserate_code"
 #get rid of the Freq row
-base_rates_t <- base_rates_t[-1, ]
-rownames(base_rates_t) <- "consensus_codes" #extract the coder initials and assign as rownames
+#base_rates_t <- base_rates_t[-1, ]
+rownames(base_rates_t) <- c("total_frequency", "consensus_codes") #extract the coder initials and assign as rownames
 #name the first coder column 
 baserate_consens <- dplyr::select(base_rates_t, -contains("end"), -contains("start"))
     
@@ -594,11 +594,12 @@ for (k in 1:length(coders_mega)) {
     }
   }
 }
+
 #create 'coder' first column
 kappas_mega <- rownames_to_column(kappas_mega, var = "coder")
 
 #get rid of empty column in base_rate_coders df
-base_rates_coders <- dplyr::select(base_rates_coders, -X6)
+base_rates_coders <- dplyr::select(base_rates_coders, -X9)
 
 #bind the base rates for consensus codes and each coder together
 baserates_all <- base_rates_coders %>% bind_rows(baserate_consens)
@@ -620,22 +621,22 @@ names(kappas_allcoders_df) <- c("Time", "Consensus Code", "participant_id", "cod
 #each kappa code: add to that df the columns you created with 0 and 1 for each code above (THIS IS CURRENTLY VER REPETITIVE BUT WITH MELT FUNCTION CAN'T IMMEDIATELY THINK OF A DIFF WAY)
 #("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
 kappas_allcoders_df <- mutate(kappas_allcoders_df,
-      neutral_code = ifelse(str_detect(code, regex("neutral", ignore.case=TRUE)), 1, 0),
-      neutral_consens = ifelse(str_detect(`Consensus Code`, regex("neutral", ignore.case=TRUE)), 1, 0),
-      active_code = ifelse(str_detect(code, regex("active", ignore.case=TRUE)), 1, 0),
-      active_consens = ifelse(str_detect(`Consensus Code`, regex("active", ignore.case=TRUE)), 1, 0),
-      positive_code = ifelse(str_detect(code, regex("positive", ignore.case=TRUE)), 1, 0),
-      positive_consens = ifelse(str_detect(`Consensus Code`, regex("positive", ignore.case=TRUE)), 1, 0),
-      uncodable_consens = ifelse(str_detect(`Consensus Code`, regex("uncodable", ignore.case=TRUE)), 1, 0),
-      uncodable_code = ifelse(str_detect(code, regex("uncodable", ignore.case=TRUE)), 1, 0),
-      withdraw_consens = ifelse(str_detect(`Consensus Code`, regex("withdraw", ignore.case=TRUE)), 1, 0),
-      withdraw_code = ifelse(str_detect(code, regex("withdraw", ignore.case=TRUE)), 1, 0),
-      offtask_consens = ifelse(str_detect(`Consensus Code`, regex("off", ignore.case=TRUE)), 1, 0),
-      offtask_code = ifelse(str_detect(code, regex("off", ignore.case=TRUE)), 1, 0),
-      nonauto_consens = ifelse(str_detect(`Consensus Code`, regex("auto", ignore.case=TRUE)), 1, 0),
-      nonauto_code = ifelse(str_detect(code, regex("auto", ignore.case=TRUE)), 1, 0),
-      reject_consens = ifelse(str_detect(`Consensus Code`, regex("reject", ignore.case=TRUE)), 1, 0),
-      reject_code = ifelse(str_detect(code, regex("reject", ignore.case=TRUE)), 1, 0)
+          neutral_code = ifelse(grepl("neutral", code, ignore.case=T), 1, 0),
+          neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case=T), 1, 0),
+          active_code = ifelse(grepl("active", code, ignore.case=T), 1, 0),
+          active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case=T), 1, 0),
+          positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case=T), 1, 0),
+          positive_code = ifelse(grepl("positive", code, ignore.case=T), 1, 0),
+          uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`, ignore.case=T), 1, 0),
+          uncodable_code = ifelse(grepl("uncodable", code, ignore.case=T), 1, 0),
+          withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case=T), 1, 0),
+          withdraw_code = ifelse(grepl("withdraw", code, ignore.case=T), 1, 0),
+          offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case=T), 1, 0),
+          offtask_code = ifelse(grepl("off", code, ignore.case=T), 1, 0),
+          nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case=T), 1, 0),
+          nonauto_code = ifelse(grepl("auto", code, ignore.case=T), 1, 0),
+          reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case=T), 1, 0),
+          reject_code = ifelse(grepl("reject", code, ignore.case=T), 1, 0)
       )
     
 #create an empty df to hold the kappas
