@@ -28,14 +28,6 @@ suppressPackageStartupMessages({
 })
 ```
 
-## Input participant id and code type you want to generate codes for
-This is the start of functionality to only generate output files for a specific participant id or code type
-This will be put in the reliability script, but not this one
-```{r}
-# pid <- "074"
-# type <- "affect"
-```
-
 ## Load data
 For certification, during Spring 2023 behavior will be certified. 
 ```{r}
@@ -669,6 +661,12 @@ summary_final <- mega_df_summary_t %>%
   full_join(code_df_t, by = "coder") %>% 
   full_join(summary_kappas, by = "coder") %>% 
   full_join(baserates_all, by = "coder")
+```
+
+## Average of dyad-specific kappas
+We want to average all of the all_coders rows that is in the kappa_all_coders
+```{r}
+
 ```
 
 ## Write summary file
