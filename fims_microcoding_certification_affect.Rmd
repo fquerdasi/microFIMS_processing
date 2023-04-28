@@ -277,10 +277,10 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
       across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "positive"), 1, 0), .names="positive_{col}"),
       uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
       across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "uncodable"), 1, 0), .names="uncodable_{col}"),
-      neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - dysphoric") | str_detect(., "negative – dysphoric"), 1, 0), .names="neg_dys_{col}"),
-      neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "negative - angry") | str_detect(., "negative – angry"), 1, 0), .names="neg_angry_{col}"),
+      neg_dys_consens = ifelse(str_detect(`Consensus Code`, "dysphoric"), 1, 0), #changed on 4/28 from "negative - angry" or "negative – angry"
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "dysphoric"), 1, 0), .names="neg_dys_{col}"), #similarly changed on 4/28
+      neg_angry_consens = ifelse(str_detect(`Consensus Code`, "angry"), 1, 0), #similarly changed on 4/28
+      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "angry"), 1, 0), .names="neg_angry_{col}"), #similarly changed, 4/28
       across(contains("_code") & !contains("agree"), ~ifelse(grepl("angry", .) | grepl("dysphoric", .), 1, 0), .names="gen_neg_{col}"),
       gen_neg_consens = ifelse(str_detect(`Consensus Code`, "angry") | str_detect(`Consensus Code`, "dysphoric"), 1, 0)
       )
@@ -385,10 +385,10 @@ create_kappa_allcoder_dfs <- function(merged_dfs) {
           positive_code = ifelse(str_detect(code, "positive"), 1, 0),
           uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
           uncodable_code = ifelse(str_detect(code, "uncodable"), 1, 0),
-          neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
-          neg_dys_code = ifelse(str_detect(code, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
-          neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
-          neg_angry_code = ifelse(str_detect(code, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0)
+          neg_dys_consens = ifelse(str_detect(`Consensus Code`, "dysphoric"), 1, 0), #similarly changed, 4/28
+          neg_dys_code = ifelse(str_detect(code, "dysphoric"), 1, 0),
+          neg_angry_consens = ifelse(str_detect(`Consensus Code`, "angry"), 1, 0),
+          neg_angry_code = ifelse(str_detect(code, "angry"), 1, 0)
           )
     
     #create an empty df to hold the kappas
@@ -510,10 +510,10 @@ mega_df <- mutate(mega_df,
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
       uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`), 1, 0),
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
-      neg_dys_consens = ifelse(grepl("negative - dysphoric", `Consensus Code`) | grepl("negative – dysphoric", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - dysphoric", .) | grepl("negative – dysphoric", .) , 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
-      neg_angry_consens = ifelse(grepl("negative - angry", `Consensus Code`) | grepl("negative – angry", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("negative - angry", .) | grepl("negative – angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
+      neg_dys_consens = ifelse(grepl("dysphoric", `Consensus Code`), 1, 0), #changed 4/28 
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
+      neg_angry_consens = ifelse(grepl("angry", `Consensus Code`), 1, 0),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
       )
 
 codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
@@ -593,10 +593,10 @@ kappas_allcoders_df <- mutate(kappas_allcoders_df,
       positive_code = ifelse(str_detect(code, "positive"), 1, 0),
       uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
       uncodable_code = ifelse(str_detect(code, "uncodable"), 1, 0),
-      neg_dys_consens = ifelse(str_detect(`Consensus Code`, "negative - dysphoric") | str_detect(`Consensus Code`, "negative – dysphoric"), 1, 0),
-      neg_dys_code = ifelse(str_detect(code, "negative - dysphoric") | str_detect(code, "negative – dysphoric"), 1, 0),
-      neg_angry_consens = ifelse(str_detect(`Consensus Code`, "negative - angry") | str_detect(`Consensus Code`, "negative – angry"), 1, 0),
-      neg_angry_code = ifelse(str_detect(code, "negative - angry") | str_detect(code, "negative – angry"), 1, 0)
+      neg_dys_consens = ifelse(str_detect(`Consensus Code`, "dysphoric"), 1, 0),
+      neg_dys_code = ifelse(str_detect(code, "dysphoric"), 1, 0), #changed 4/28
+      neg_angry_consens = ifelse(str_detect(`Consensus Code`, "angry"), 1, 0),
+      neg_angry_code = ifelse(str_detect(code, "angry"), 1, 0)
       )
     
 #create an empty df to hold the kappas
