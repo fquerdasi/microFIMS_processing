@@ -94,7 +94,7 @@ NOTE: if you run the for function more than once, will get weird errors
 ```{r}
 #remove the null and na entries in the list (from files that were not read in)
 coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
-#coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
 
 #change the time variable to be double in all dfs
 for (i in 1:length(coder_dfs)) {
@@ -274,14 +274,14 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
       across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "neutral"), 1, 0), .names="neutral_{col}"),
       neutral_consens = ifelse(str_detect(`Consensus Code`, "neutral"), 1, 0),
       positive_consens = ifelse(str_detect(`Consensus Code`, "positive"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "positive"), 1, 0), .names="positive_{col}"),
+      across(contains("_code") & !contains("agree") & !contains("neutral"), ~ifelse(str_detect(., "positive"), 1, 0), .names="positive_{col}"),
       uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "uncodable"), 1, 0), .names="uncodable_{col}"),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("positive"), ~ifelse(str_detect(., "uncodable"), 1, 0), .names="uncodable_{col}"),
       neg_dys_consens = ifelse(str_detect(`Consensus Code`, "dysphoric"), 1, 0), #changed on 4/28 from "negative - angry" or "negative – angry"
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "dysphoric"), 1, 0), .names="neg_dys_{col}"), #similarly changed on 4/28
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("positive") & !contains("uncodable"), ~ifelse(str_detect(., "dysphoric"), 1, 0), .names="neg_dys_{col}"), #similarly changed on 4/28
       neg_angry_consens = ifelse(str_detect(`Consensus Code`, "angry"), 1, 0), #similarly changed on 4/28
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "angry"), 1, 0), .names="neg_angry_{col}"), #similarly changed, 4/28
-      across(contains("_code") & !contains("agree"), ~ifelse(grepl("angry", .) | grepl("dysphoric", .), 1, 0), .names="gen_neg_{col}"),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("positive") & !contains("uncodable") & !contains("neg_dys"), ~ifelse(str_detect(., "angry"), 1, 0), .names="neg_angry_{col}"), #similarly changed, 4/28
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("positive") & !contains("uncodable") & !contains("neg_dys") & !contains("neg_angry"), ~ifelse(grepl("angry", .) | grepl("dysphoric", .), 1, 0), .names="gen_neg_{col}"),
       gen_neg_consens = ifelse(str_detect(`Consensus Code`, "angry") | str_detect(`Consensus Code`, "dysphoric"), 1, 0)
       )
     
@@ -290,7 +290,7 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
     coders_init <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$") & stri_locate_first_regex(colnames(merged_dfs[[names(merged_dfs)[i]]]), "[A-Z]")==1)] 
     #remove NA values in coders (stri_locate_first_regex returns NA for columns that don't have any uppercase)
     coders <- coders_init[!is.na(coders_init)] 
-    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
+    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg", "total")
     
     #create empty dfs to hold the kappas and base rates
     kappas <- data.frame(matrix(NA, nrow=length(coders),ncol=length(codes)))
@@ -325,7 +325,7 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
     #create 'coder' first column
     kappas <- rownames_to_column(kappas, var = "coder")
     base_rates_coders <- rownames_to_column(base_rates_coders, var="coder")
-    base_rates_coders <- dplyr::select(base_rates_coders, -X6)
+    base_rates_coders <- dplyr::select(base_rates_coders, -X7)
     
     #calculate base rates for consensus codes, bind rows to the base_rate_coders df
     codes_minus_total <- codes[1:length(codes)-1] #get a list of codes except total 
@@ -507,13 +507,13 @@ mega_df <- mutate(mega_df,
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
       neutral_consens = ifelse(grepl("neutral", `Consensus Code`), 1, 0), #if code is neutral, 1; otherwise, 0
       positive_consens = ifelse(grepl("positive", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree") & !contains("neutral"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
       uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree") & !contains("neutral") & !contains("positive"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
       neg_dys_consens = ifelse(grepl("dysphoric", `Consensus Code`), 1, 0), #changed 4/28 
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree") & !contains("neutral") & !contains("positive") & !contains("uncodable"), ~ifelse(grepl("dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
       neg_angry_consens = ifelse(grepl("angry", `Consensus Code`), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree") & !contains("neutral") & !contains("positive") & !contains("uncodable") & !contains("dys"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
       )
 
 codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "total")
