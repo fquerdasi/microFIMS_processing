@@ -94,7 +94,7 @@ NOTE: if you run the for function more than once, will get weird errors
 ```{r}
 #remove the null and na entries in the list (from files that were not read in)
 coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
-coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+#coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
 
 #change the time variable to be double in all dfs
 for (i in 1:length(coder_dfs)) {

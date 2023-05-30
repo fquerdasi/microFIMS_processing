@@ -34,6 +34,9 @@ reliability_codes <- "../../../../Lab/Video_coding_fims_micro/fims_micro" #overa
 #get all of the .txt files from within the overall directory
 fl <- list.files(path=reliability_codes, pattern = "*.txt", recursive=TRUE, full.names = TRUE) #this will output a list of the files
 
+# select the files in behavior folders
+fl <- fl[grepl("behavior", fl)]
+
 #get a list of empty files from df to exclude for reading in (otherwise r with throw an error)
 empty <- fl[file.size(fl) == 0L]
 
@@ -43,9 +46,9 @@ list_name <- "reliability_dfs"
 list <- list()
 for (i in 1:length(fl)) { #for each file in the list
   #if file and folder name match, and the file is not empty...
-  if ((gsub("fims_micro/", "", str_match(fl[[i]], "micro/(.*?)/fims")[2]) == str_match(fl[[i]], "affect/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
+  if ((gsub("fims_micro/", "", str_match(fl[[i]], "micro/(.*?)/fims")[2]) == str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
     #get info to add to the dfs
-    id_file_name <- str_match(fl[[i]], "affect/(.*?)_[A-Za-z]")[2] #this is the participant id
+    id_file_name <- str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2] #this is the participant id
     coder_initials <- str_match(fl[[i]], "Micro_(.*?).txt")[2]
     #read the file into r, create column names
     df <- read.table(fl[[i]], header=FALSE, fill=TRUE, sep="\t")
@@ -57,10 +60,10 @@ for (i in 1:length(fl)) { #for each file in the list
     names(list)[i] <- df_name
   } else if (fl[[i]] %in% empty) { #else if the file is empty...
     #write a message telling the person that the file name is empty and not being read in
-    print(paste0(str_match(fl[[i]], 'affect/(.*)')[2], " is empty -- not being read into R"))
+    print(paste0(str_match(fl[[i]], 'behavior/(.*)')[2], " is empty -- not being read into R"))
   } else { #if the file and folder name do not match...
     #write a message saying to check naming
-    print(paste0("file ", str_match(fl[[i]], 'affect/(.*)')[2], " and folder ", gsub("fims_micro/", "", str_match(fl[[i]], "micro/(.*?)/fims")[2]), " names do not match, not being read into R now -- please check"))
+    print(paste0("file ", str_match(fl[[i]], 'behavior/(.*)')[2], " and folder ", gsub("fims_micro/", "", str_match(fl[[i]], "micro/(.*?)/fims")[2]), " names do not match, not being read into R now -- please check"))
   }
 }
 #assign the list to the global environment
@@ -127,13 +130,15 @@ for (df_name in names(merged_dfs)) {
   #create binary 1/0 agreement variable between each pair of coders
   merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], coders_agree := case_when(
       #if the string is found in the coder code and consensus code, variable is 1
-      grepl("neutral", get(coders[1])) & grepl("neutral", get(coders[2])) ~ 1, 
-      grepl("positive", get(coders[1])) & grepl("positive", get(coders[2])) ~ 1,
-      grepl("dysphoric", get(coders[1])) & grepl("dysphoric", get(coders[2])) ~ 1,
-      grepl("angry", get(coders[1])) & grepl("angry", get(coders[2])) ~ 1,
-      grepl("uncodable", get(coders[1])) & grepl("uncodable", get(coders[2])) ~ 1,
-      grepl("end", get(coders[1])) & grepl("end", get(coders[2])) ~ 1,
-      grepl("start", get(coders[1])) & grepl("start", get(coders[2])) ~ 1,
+      grepl("neutral", get(coders[1]), ignore.case=TRUE) & grepl("neutral", get(coders[2]), ignore.case=TRUE) ~ 1, 
+      grepl("pressures", get(coders[1]), ignore.case=TRUE) & grepl("pressures", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("disengaged", get(coders[1]), ignore.case=TRUE) & grepl("disengaged", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("requests", get(coders[1]), ignore.case=TRUE) & grepl("requests", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("warm", get(coders[1]), ignore.case=TRUE) & grepl("warm", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("requests", get(coders[1]), ignore.case=TRUE) & grepl("requests", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("auto", get(coders[1]), ignore.case=TRUE) & grepl("auto", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("explanation", get(coders[1]), ignore.case=TRUE) & grepl("explanation", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("uncodable", get(coders[1]), ignore.case=TRUE) & grepl("uncodable", get(coders[2]), ignore.case=TRUE) ~ 1,
       is.na(get(coders[1])) | is.na(get(coders[2])) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
       TRUE ~ 0 #otherwise if none of the above are met, value is 0
   ), 
@@ -144,7 +149,7 @@ for (df_name in names(merged_dfs)) {
 ## Write individual participant files with binary agreement per code
 Need to write in correct path
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/affect/" #path to write the files
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" #path to write the files
 
 #for each entry in the merged_dfs list, write the entry as a .csv called "name_agreement.csv"
 lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]], 
@@ -153,6 +158,8 @@ lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]],
 
 #NULLs output below mean that writing the file was successful 
 ```
+STOPPED HERE FOR EDITING FOR BEHAVIOR
+
 
 # Create summary file for each participant
 ## Create binary columns for whether each coder indicated a specific code
@@ -255,7 +262,7 @@ for (i in 1:length(merged_dfs)) {
 
 ## Write the summary file for each participant
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/affect/" #path to write the files
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" #path to write the files
 
 #for each entry in the indiv_dfs kappas and % agreement list, write a .csv
 lapply(1:length(participant_summary_dfs), function(i) write.csv(participant_summary_dfs[[i]], 
@@ -526,7 +533,7 @@ parent_summary_df_1row_final <- rbind(parent_summary_df_1row, parent_mean_row)
 
 ## Write child and parent summaries (1 row per participant)
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/affect/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
 
 #write the summary file csv
 write_csv(child_summary_df_1row_final, str_c(path, "child_summary_each_p.csv"))
@@ -701,7 +708,7 @@ final_summary <- coderpairs_summary %>% bind_rows(all_summary_df)
 
 ## Write final summary file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/affect/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
 
 #write the summary file csv
 write_csv(final_summary, str_c(path, "all_summary.csv"))
@@ -730,7 +737,7 @@ n_ps_summary <- rownames_to_column(n_ps_summary, var = "coderpair")
 
 ## Write number of participants file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/affect/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
 
 #write the summary file csv
 write_csv(n_ps_summary, str_c(path, "number_participants.csv"))
