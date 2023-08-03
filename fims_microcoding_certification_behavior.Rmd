@@ -86,7 +86,7 @@ NOTE: if you run the for function more than once, will get weird errors
 ```{r}
 #remove the null and na entries in the list (from files that were not read in)
 #coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
-coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+#coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
 
 #change the time variable to be double in all dfs
 for (i in 1:length(coder_dfs)) {
@@ -226,14 +226,16 @@ create_agreement_dfs <- function(merged_dfs) {
       #change the columns
       #remove the NA column for NA values of cons_codes_consol
       code_df <- filter(code_df, !is.na(cons_codes_consol))
-      # first remember the new column names
+      # first remember the new column names and coder names
       names <- str_c(code_df$cons_codes_consol, "%agree", sep="_")
+      coders_code_df <- colnames(code_df)[-1]
       # transpose all but the first column (names)
       code_df_t <- as.data.frame(t(code_df[,-1]))
       #assign column names to the columns
       colnames(code_df_t) <- names 
       #label first column 
       code_df_t <- rownames_to_column(code_df_t, var = "coder")
+      code_df_t[1] <- coders_code_df
     
       #merge these with total % agreement dataframe
       final_df <- total_df %>% left_join(code_df_t, by = "coder")
@@ -250,9 +252,10 @@ create_agreement_dfs <- function(merged_dfs) {
 create_agreement_dfs(merged_dfs) 
 
 ```
+FIXED UP TO HERE FOR NEW ROUND OF BEHAIVOR CERTIFICATION
 
-## Calculate kappas (total and for each code) and base rates for each coder
-
+## Calculate kappas (total only) and base rates for each coder
+NOTE: need to drop code-specific kappas NEXT 
 ```{r}
 #create loop to go through all the merged_dfs and save the kappas in a list
 create_kappa_baserates_dfs <- function(merged_dfs) {
