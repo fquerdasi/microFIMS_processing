@@ -4,7 +4,7 @@ author: "Fran Querdasi"
 date: "2023-02-09"
 output: html_document
 ---
-
+NOTE: finished editing for behavior, neeed to test
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -27,6 +27,7 @@ suppressPackageStartupMessages({
 
 ## Load data
 For reliability, during Winter 2023 only affect codes will be tested, and only one interaction will be coded for each participant. 
+Week 8 of Spring started piloting behavior certification codes. 
 
 ```{r}
 reliability_codes <- "../../../../Lab/Video_coding_fims_micro/fims_micro" #overall directory where all of the codes
@@ -89,6 +90,8 @@ for (i in 1:length(reliability_dfs)) {
 #get the names of all the dataframes
 reliability_df_names <- sort(names(reliability_dfs)) #names of the coder dfs
 
+#ISSUE WHERE PAIR AFTER LONE FILE DOESN'T GET READ IN -- not sure why this happened once and then re-run it worked
+
 #for all of the names_of_dfs, if cons_df_names contains the name, then full_join it with the df that contains it on Tier and Time
 merge_reliability_dfs <- function(reliability_dfs, reliability_df_names) {
 list_name <- "merged_dfs" #set the name of the output list
@@ -135,7 +138,6 @@ for (df_name in names(merged_dfs)) {
       grepl("disengaged", get(coders[1]), ignore.case=TRUE) & grepl("disengaged", get(coders[2]), ignore.case=TRUE) ~ 1,
       grepl("requests", get(coders[1]), ignore.case=TRUE) & grepl("requests", get(coders[2]), ignore.case=TRUE) ~ 1,
       grepl("warm", get(coders[1]), ignore.case=TRUE) & grepl("warm", get(coders[2]), ignore.case=TRUE) ~ 1,
-      grepl("requests", get(coders[1]), ignore.case=TRUE) & grepl("requests", get(coders[2]), ignore.case=TRUE) ~ 1,
       grepl("auto", get(coders[1]), ignore.case=TRUE) & grepl("auto", get(coders[2]), ignore.case=TRUE) ~ 1,
       grepl("explanation", get(coders[1]), ignore.case=TRUE) & grepl("explanation", get(coders[2]), ignore.case=TRUE) ~ 1,
       grepl("uncodable", get(coders[1]), ignore.case=TRUE) & grepl("uncodable", get(coders[2]), ignore.case=TRUE) ~ 1,
@@ -158,8 +160,6 @@ lapply(1:length(merged_dfs), function(i) write.csv(merged_dfs[[i]],
 
 #NULLs output below mean that writing the file was successful 
 ```
-STOPPED HERE FOR EDITING FOR BEHAVIOR
-
 
 # Create summary file for each participant
 ## Create binary columns for whether each coder indicated a specific code
@@ -174,11 +174,13 @@ coders <- colnames(merged_dfs[[df_name]])[which(str_detect(colnames(merged_dfs[[
 #create binary 'did the coder indicate this code' for each code
 merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], 
    across(ends_with("_code"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("dysphoric", .), 1, 0), .names="neg_dys_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("angry", .), 1, 0), .names="neg_angry_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("angry", .) | grepl("dysphoric", .), 1, 0), .names="gen_neg_{sub('_code', '', col)}")
+   across(ends_with("_code"), ~ifelse(grepl("pressures", .), 1, 0), .names="pressures_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("disengaged", .), 1, 0), .names="disengaged_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("requests", .), 1, 0), .names="requests_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("warm", .), 1, 0), .names="warm_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("auto", .), 1, 0), .names="auto_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("explanation", .), 1, 0), .names="explan_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}")
 ) 
 }
 
@@ -197,7 +199,7 @@ calc_reliability_participant <- function(merged_dfs) {
     
     #get list of coder columns and codes
     coders <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$"))] 
-    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg","total")
+    codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total")
     
     #create empty dfs to percent agreements
     participant_summary_df <- data.frame(matrix(NA, nrow=5, ncol=length(codes))) #rows will be "perc_agree", "presence_agree", "kappa", "baserate_c1", "baserate_c2"
@@ -262,7 +264,7 @@ for (i in 1:length(merged_dfs)) {
 
 ## Write the summary file for each participant
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" #path to write the files
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data//behavior/" #path to write the files
 
 #for each entry in the indiv_dfs kappas and % agreement list, write a .csv
 lapply(1:length(participant_summary_dfs), function(i) write.csv(participant_summary_dfs[[i]], 
@@ -338,7 +340,7 @@ children <- mega_df %>% dplyr::filter(Participant=="Child") %>% dplyr::select(wh
 all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
 child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
 parent_coders <- colnames(parents)[which(str_detect(colnames(parents), "_code$"))] 
-codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg" ,"total")
+codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total")
 
 #create empty dfs to percent agreements
 all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+3), ncol=length(codes))) #+3 rows for kappa_allcoders, presence_agree_allcoders and percent_agree_allcoders
@@ -387,9 +389,9 @@ for (j in 1:length(codes)){
 #rename first column 
 #all_summary_df <- rownames_to_column(all_summary_df, var = "statistic")
 #rename extra column for 'total' that will get filled in later
-colnames(all_summary_df)[7] <- paste0(codes[7])
-colnames(parent_summary_df)[7] <- paste0(codes[7])
-colnames(child_summary_df)[7] <- paste0(codes[7])
+colnames(all_summary_df)[9] <- paste0(codes[9])
+colnames(parent_summary_df)[9] <- paste0(codes[9])
+colnames(child_summary_df)[9] <- paste0(codes[9])
 
 #for parent and child summaries, calculate average base rate for each code
 parent_summary_df[length(parent_coders)+1, ] <- colMeans(parent_summary_df, na.rm=TRUE)
@@ -398,6 +400,7 @@ child_summary_df[length(child_coders)+1, ] <- colMeans(child_summary_df, na.rm=T
 rownames(parent_summary_df)[length(parent_coders)+1] <- "averge_base_rate"
 rownames(child_summary_df)[length(child_coders)+1] <- "averge_base_rate"
 ```
+STOPPED HERE FOR EDITING FOR BEHAVIOR
 
 # Create summary child and parent files with 1 row per participant
 Child summary and parent summary
@@ -412,9 +415,9 @@ child_dfs <- merged_dfs[grepl("child",names(merged_dfs))]
 parent_dfs <- merged_dfs[grepl("parent",names(merged_dfs))]
 
 calc_reliability_each_p_1row <- function(child_dfs) {
-  codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg","total")
+  codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total") 
   #create parent and child dfs with 1 row for each participant
-  child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*5)+6)))
+  child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*5)+6))) #6 = total pc agree and kappa, seconds coded and coder for 1 and 2
   #parent_summary_df_1row <- data.frame(matrix(NA, nrow=length(parent_dfs), ncol=(length(codes)*3)-1))
   
   #fill in the child df... 
@@ -533,7 +536,7 @@ parent_summary_df_1row_final <- rbind(parent_summary_df_1row, parent_mean_row)
 
 ## Write child and parent summaries (1 row per participant)
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
 
 #write the summary file csv
 write_csv(child_summary_df_1row_final, str_c(path, "child_summary_each_p.csv"))
@@ -619,7 +622,7 @@ calc_reliability_coderpair <- function(coder_dfs) {
     
     #get list of coder columns and codes
     coders <- colnames(coder_dfs[[names(coder_dfs)[i]]])[which(str_detect(colnames(coder_dfs[[names(coder_dfs)[i]]]), "_code$"))] 
-    codes <- c("neutral", "positive", "uncodable", "neg_dys", "neg_angry", "gen_neg", "total")
+    codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total")
     
     #create empty dfs to percent agreements
     coderpair_summary_df <- data.frame(matrix(NA, nrow=5, ncol=length(codes))) #rows will be "perc_agree", "presence_agree", "kappa", "baserate_c1", "baserate_c2"
@@ -708,7 +711,7 @@ final_summary <- coderpairs_summary %>% bind_rows(all_summary_df)
 
 ## Write final summary file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
 
 #write the summary file csv
 write_csv(final_summary, str_c(path, "all_summary.csv"))
@@ -737,7 +740,7 @@ n_ps_summary <- rownames_to_column(n_ps_summary, var = "coderpair")
 
 ## Write number of participants file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
 
 #write the summary file csv
 write_csv(n_ps_summary, str_c(path, "number_participants.csv"))
