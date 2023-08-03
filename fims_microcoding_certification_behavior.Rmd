@@ -56,7 +56,7 @@ for (i in 1:length(fl)) { #for each file in the list
   if ((str_match(fl[[i]], "Micro//(.*?)/fims")[2] == str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2]) & !(fl[[i]] %in% empty)) {
     #get info to add to the dfs
     id_file_name <- str_match(fl[[i]], "behavior/(.*?)_[A-Za-z]")[2] #this is the participant id
-    coder_initials <- str_match(fl[[i]], "Micro_(.*?).txt")[2]
+    coder_initials <- gsub(".*?_([A-Za-z]{2})(?=\\.|_|$).*", "\\1", fl[[i]], perl = TRUE) #extract two letters bounded by _ on left and either _ or . on right
     #read the file into r, create column names
     df <- read.table(fl[[i]], header=FALSE, fill=TRUE, sep="\t")
     colnames(df) <- c("Tier", "Participant", "Time", str_c(coder_initials, "_code")) #column names are Tier, Participant, Time, and <coder initials>_code
@@ -358,7 +358,6 @@ create_kappa_baserates_dfs(merged_dfs)
 ```
 
 ## Calculate kappa across all coders for each participant
-Why does this not have percent agreement? 
 ```{r}
 create_kappa_allcoder_dfs <- function(merged_dfs) {
   list_name_kappa_allc <- "kappa_allcoder_dfs"
