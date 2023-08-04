@@ -494,52 +494,42 @@ mega_df <- mutate(mega_df,
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("uncodable", ., ignore.case=TRUE), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
       #withdraw
       withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case=TRUE), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("withdraw", ., ignore.case=TRUE), 1, 0), .names="withdraw_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("withdraw", ., ignore.case=TRUE), 1, 0), .names="withdrawal_{sub('_code', '', col)}"),
       #offtask
       offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case=TRUE), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("off", ., ignore.case=TRUE), 1, 0), .names="offtask_{sub('_code', '', col)}"),
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("off", ., ignore.case=TRUE), 1, 0), .names="off-task_{sub('_code', '', col)}"),
       #nonauto
       nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case=TRUE), 1, 0),
       across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("auto", ., ignore.case=TRUE), 1, 0), .names="nonauto_{sub('_code', '', col)}"),
       #reject
       reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case=TRUE), 1, 0),
-      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("reject", ., ignore.case=TRUE), 1, 0), .names="reject_{sub('_code', '', col)}")
+      across(ends_with("_code") & !contains("agree"), ~ifelse(grepl("reject", ., ignore.case=TRUE), 1, 0), .names="rejecting_{sub('_code', '', col)}")
       )
 
-codes <- c("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
+codes <- c("neutral", "active", "positive", "uncodable", "withdrawal", "off-task", "nonauto", "rejecting", "total")
 
 #calculate base rate for each code
 base_rates <- as.data.frame(table(mega_df$cons_codes_consol)) %>% 
   mutate(base_rate_cons = Freq/sum(!is.na(mega_df$cons_codes_consol)))
 
-# first remember the new column names
-names <- c("active", "neutral", "nonauto", "offtask", "positive", "reject", "uncodable", "withdraw") #ordered alphabetically 
 # transpose all but the first column (names)
 base_rates_t <- as.data.frame(t(base_rates[,-1]))
 
-#FIXED UP TO HERE FOR NEW ROUND OF BEHAIVOR CERTIFICATION
-#need to fix the below because the number of non-zero codes is less than total 
-
-colnames(base_rates_t) <- str_c("baserate", names, sep="_") #assign the column names, "baserate_code"
-#get rid of the Freq row
-#base_rates_t <- base_rates_t[-1, ]
+# assign column names based on values in Var1 column (first word)
+colnames(base_rates_t) <- str_c("baserate", stringr::word(base_rates[,1], 1), sep="_")
 rownames(base_rates_t) <- c("total_frequency", "consensus_codes") #extract the coder initials and assign as rownames
 #name the first coder column 
 baserate_consens <- dplyr::select(base_rates_t, -contains("end"), -contains("start"))
-    
+
 #create an empty df to hold the kappas and the base rates
-kappas_mega <- data.frame(matrix(NA, nrow=length(coders_mega),ncol=length(codes)))
-base_rates_coders <- data.frame(matrix(NA, nrow=(length(coders_mega)-1),ncol=length(codes))) 
+kappas_mega <- data.frame(matrix(NA, nrow=length(coders_mega),ncol=1))
+base_rates_coders <- data.frame(matrix(NA, nrow=length(coders_mega),ncol=(length(codes)-1))) #why is the nrow 1 less than N coders?
 
 #calculate kappas and base rates for each coder and code, put in df
 for (k in 1:length(coders_mega)) {
   for (j in 1:length(codes)){
     if (codes[j] != "total") { #for all codes except total kappa...
-      dum_col_name = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_") #neutral_MA
-      cons_col_name = str_c(codes[j], "consens", sep="_") #neutral_consens
-      kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_name]], mega_df[[dum_col_name]]))$value # Adding new variable to data
-      colnames(kappas_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_"))
-      rownames(kappas_mega)[k] <- coders_mega[k]
+      
       #calculate base rates
       code_rate_coder = str_c(codes[j], sub('_code', '', coders_mega[k]), sep="_") #neutral_MA
       coder_codes = coders_mega[k]
@@ -550,8 +540,8 @@ for (k in 1:length(coders_mega)) {
     else { #do a different procedure for total kappa
       coder_col_name = coders_mega[k]
       cons_col_init_name = "Consensus Code"
-      kappas_mega[k , j] <- kappa2(cbind(mega_df[[cons_col_init_name]], mega_df[[coder_col_name]]))$value
-      colnames(kappas_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_"))
+      kappas_mega[k , 1] <- kappa2(cbind(mega_df[[cons_col_init_name]], mega_df[[coder_col_name]]))$value
+      colnames(kappas_mega)[1] <- paste0(str_c("kappa", "total", sep="_"))
       rownames(kappas_mega)[k] <- sub('_code', '', coders_mega[k])
     }
   }
@@ -561,7 +551,7 @@ for (k in 1:length(coders_mega)) {
 kappas_mega <- rownames_to_column(kappas_mega, var = "coder")
 
 #get rid of empty column in base_rate_coders df
-base_rates_coders <- dplyr::select(base_rates_coders, -X9)
+#base_rates_coders <- dplyr::select(base_rates_coders, -X9)
 
 #bind the base rates for consensus codes and each coder together
 baserates_all <- base_rates_coders %>% bind_rows(baserate_consens)
@@ -582,42 +572,33 @@ names(kappas_allcoders_df) <- c("Time", "Consensus Code", "participant_id", "cod
     
 #each kappa code: add to that df the columns you created with 0 and 1 for each code above (THIS IS CURRENTLY VER REPETITIVE BUT WITH MELT FUNCTION CAN'T IMMEDIATELY THINK OF A DIFF WAY)
 #("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
-kappas_allcoders_df <- mutate(kappas_allcoders_df,
-          neutral_code = ifelse(grepl("neutral", code, ignore.case=T), 1, 0),
-          neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case=T), 1, 0),
-          active_code = ifelse(grepl("active", code, ignore.case=T), 1, 0),
-          active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case=T), 1, 0),
-          positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case=T), 1, 0),
-          positive_code = ifelse(grepl("positive", code, ignore.case=T), 1, 0),
-          uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`, ignore.case=T), 1, 0),
-          uncodable_code = ifelse(grepl("uncodable", code, ignore.case=T), 1, 0),
-          withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case=T), 1, 0),
-          withdraw_code = ifelse(grepl("withdraw", code, ignore.case=T), 1, 0),
-          offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case=T), 1, 0),
-          offtask_code = ifelse(grepl("off", code, ignore.case=T), 1, 0),
-          nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case=T), 1, 0),
-          nonauto_code = ifelse(grepl("auto", code, ignore.case=T), 1, 0),
-          reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case=T), 1, 0),
-          reject_code = ifelse(grepl("reject", code, ignore.case=T), 1, 0)
-      )
-    
+# kappas_allcoders_df <- mutate(kappas_allcoders_df,
+#           neutral_code = ifelse(grepl("neutral", code, ignore.case=T), 1, 0),
+#           neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case=T), 1, 0),
+#           active_code = ifelse(grepl("active", code, ignore.case=T), 1, 0),
+#           active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case=T), 1, 0),
+#           positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case=T), 1, 0),
+#           positive_code = ifelse(grepl("positive", code, ignore.case=T), 1, 0),
+#           uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`, ignore.case=T), 1, 0),
+#           uncodable_code = ifelse(grepl("uncodable", code, ignore.case=T), 1, 0),
+#           withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case=T), 1, 0),
+#           withdraw_code = ifelse(grepl("withdraw", code, ignore.case=T), 1, 0),
+#           offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case=T), 1, 0),
+#           offtask_code = ifelse(grepl("off", code, ignore.case=T), 1, 0),
+#           nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case=T), 1, 0),
+#           nonauto_code = ifelse(grepl("auto", code, ignore.case=T), 1, 0),
+#           reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case=T), 1, 0),
+#           reject_code = ifelse(grepl("reject", code, ignore.case=T), 1, 0)
+#       )
+#     
 #create an empty df to hold the kappas
-kappas_allcoders_mega <- data.frame(matrix(NA, nrow=1,ncol=length(codes)))
+kappas_allcoders_mega <- data.frame(matrix(NA, nrow=1,ncol=1))
 rownames(kappas_allcoders_mega) <- "all_coders"
 
-#calculate kappas for each coder and code, put in df
-  for (j in 1:length(codes)){
-    if (codes[j] != "total") { #for all codes except total kappa...
-      dum_col_name = str_c(codes[j], "code", sep="_") #coder dummy code column name e.g., neutral_code
-      cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
-      kappas_allcoders_mega[1, j] <- kappa2(cbind(kappas_allcoders_df[[cons_col_name]], kappas_allcoders_df[[dum_col_name]]))$value # Calculate kappa, add new variable to data
-      colnames(kappas_allcoders_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
-      }
-    else { #do a different procedure for total kappa
-      kappas_allcoders_mega[1 , j] <- kappa2(cbind(kappas_allcoders_df[["Consensus Code"]], kappas_allcoders_df[["code"]]))$value #calculate total kappa, add new variable 
-      colnames(kappas_allcoders_mega)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
-    }
-  }
+#calculate total kappa across all coders, put in df
+kappas_allcoders_mega[1 , 1] <- kappa2(cbind(kappas_allcoders_df[["Consensus Code"]], kappas_allcoders_df[["code"]]))$value #calculate total kappa, add new variable 
+colnames(kappas_allcoders_mega)[1] <- paste0(str_c("kappa", "total", sep="_")) #name the column "Kappa_total"
+  
 
 #create 'coder' first column
 kappas_allcoders_mega <- rownames_to_column(kappas_allcoders_mega, var = "coder")
