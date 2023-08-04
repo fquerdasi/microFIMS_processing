@@ -653,7 +653,64 @@ write_csv(np_summary, str_c(path, "number_participants.csv"))
 ```
 
 # Calculate reliability (total kappa only) for all possible pairs of coders
+Per participant 
+n(n-1)/2
 ```{r}
+# for all the merged_dfs, create a "coder1_coder2_agree" column; one column for each possible combination of coders (2 coders = 1 column, 3 codres = 2 columns, 4 coders = 6 columns)
+calc_reliability_certification <- function(merged_dfs) {
+  list_name <- "reliability_certification"
+  list <- list()
+  for (i in 1:length(merged_dfs)) {
+    #create the final df name
+    final_df_name <- str_c(names(merged_dfs)[i], "_reliability", sep="")
+    
+    #get list of coder columns
+    coders <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$"))] 
+    
+    #create empty dfs to hold the kappas in
+    participant_summary_df <- data.frame(matrix(NA, nrow=((length(coders)*(length(coders)-1))/2), ncol=1)) # column will be "total_kappa" and rows will be combinatinos of coders (formula n(n-1)/2 is number of unique pairs in a set)
+    
+    # generate pairs of coders (e.g, coder1/coder2, coder1/coder3, coder2/coder3)
+    generate_pairs <- function(n) {
+    pairs <- vector("list", length = n*(n-1)/2)
+    idx <- 1
+    for (i in 1:(n-1)) {
+      for (j in (i+1):n) {
+        pairs[[idx]] <- c(i, j)
+        idx <- idx + 1
+      }
+    }
+    return(pairs)
+    }
 
+    all_pairs <- generate_pairs(length(coders))
+    
+    for (j in 1:length(all_pairs)){
+    #calculate total kappa for each pair
+    participant_summary_df[j , 1] <- kappa2(cbind(merged_dfs[[i]][[coders[all_pairs[[j]][1]]]], merged_dfs[[i]][[coders[all_pairs[[j]][2]]]]))$value #calculate total kappa, add new variable 
+    colnames(participant_summary_df)[1] <- paste0("total_kappa")
+    rownames(participant_summary_df)[j] <- paste0(str_c(sub("_code", "", coders[all_pairs[[j]][1]]), sub("_code", "", coders[all_pairs[[j]][2]]), sep="_")) 
+    }
+
+    #create 'coder' first column
+    participant_summary_df <- rownames_to_column(participant_summary_df, var = "coder_pair")
+    list[[i]] <-  participant_summary_df 
+    names(list)[i] <- final_df_name
+  }
+  #assign the completed list to the global environment
+  assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+calc_reliability_certification(merged_dfs) 
+```
+
+## Write reliability for all pairs of coders to file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_behavior/"
+
+lapply(1:length(reliability_certification), function(i) write.csv(reliability_certification[[i]], 
+                                      file = paste0(str_c(path, names(reliability_certification)[i])), # call MBB074_reliability
+                                      row.names = FALSE))
 ```
 
