@@ -257,7 +257,7 @@ create_agreement_dfs(merged_dfs)
 ```
 
 ## Calculate kappas (total and for each code) and base rates for each coder
-
+NOTE: need to change all dummy code columns from str_detect to grepl 
 ```{r}
 #create loop to go through all the merged_dfs and save the kappas in a list
 create_kappa_baserates_dfs <- function(merged_dfs) {

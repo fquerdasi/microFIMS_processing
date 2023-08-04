@@ -252,10 +252,8 @@ create_agreement_dfs <- function(merged_dfs) {
 create_agreement_dfs(merged_dfs) 
 
 ```
-FIXED UP TO HERE FOR NEW ROUND OF BEHAIVOR CERTIFICATION
 
 ## Calculate kappas (total only) and base rates for each coder
-NOTE: need to drop code-specific kappas NEXT 
 ```{r}
 #create loop to go through all the merged_dfs and save the kappas in a list
 create_kappa_baserates_dfs <- function(merged_dfs) {
@@ -270,22 +268,22 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
     #create dummy code columns for each code for each coder's code and the consensus codes
     #"neutral behavior", "active social engagement behavior", "positive social communication behavior", "withdrawal from interaction", "off-task behavior", "uncodable", "non-autonomous behavior", and "rejecting others"
     merged_dfs[[names(merged_dfs)[i]]] <- mutate(merged_dfs[[names(merged_dfs)[i]]],
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "neutral"), 1, 0), .names="neutral_{col}"),
-      neutral_consens = ifelse(str_detect(`Consensus Code`, "neutral"), 1, 0),
-      active_consens = ifelse(str_detect(`Consensus Code`, "active"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "active"), 1, 0), .names="active_{col}"),
-      positive_consens = ifelse(str_detect(`Consensus Code`, "positive"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "positive"), 1, 0), .names="positive_{col}"),
-      uncodable_consens = ifelse(str_detect(`Consensus Code`, "uncodable"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "uncodable"), 1, 0), .names="uncodable_{col}"),
-      withdraw_consens = ifelse(str_detect(`Consensus Code`, "withdraw"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "withdraw"), 1, 0), .names="withdraw_{col}"),
-      offtask_consens = ifelse(str_detect(`Consensus Code`, "off"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "off"), 1, 0), .names="offtask_{col}"),
-      nonauto_consens = ifelse(str_detect(`Consensus Code`, "auto"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "auto"), 1, 0), .names="nonauto_{col}"),
-      reject_consens = ifelse(str_detect(`Consensus Code`, "reject"), 1, 0),
-      across(contains("_code") & !contains("agree"), ~ifelse(str_detect(., "reject"), 1, 0), .names="reject_{col}")
+      across(contains("_code") & !contains("agree"), ~ifelse(grepl("neutral", ., ignore.case = TRUE), 1, 0), .names="neutral_{col}"),
+      neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral"), ~ifelse(grepl("active", ., ignore.case = TRUE), 1, 0), .names="active_{col}"),
+      positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("active"), ~ifelse(grepl("positive", ., ignore.case = TRUE), 1, 0), .names="positive_{col}"),
+      uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("active") & !contains("positive"), ~ifelse(grepl("uncodable", ., ignore.case = TRUE), 1, 0), .names="uncodable_{col}"),
+      withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("active") & !contains("positive") & !contains("uncodable"), ~ifelse(grepl("withdraw", ., ignore.case = TRUE), 1, 0), .names="withdraw_{col}"),
+      offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("active") & !contains("positive") & !contains("uncodable") & !contains("withdraw"), ~ifelse(grepl("off", ., ignore.case = TRUE), 1, 0), .names="offtask_{col}"),
+      nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("active") & !contains("positive") & !contains("uncodable") & !contains("withdraw") & !contains("offtask"), ~ifelse(grepl("auto", ., ignore.case = TRUE), 1, 0), .names="nonauto_{col}"),
+      reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case = TRUE), 1, 0),
+      across(contains("_code") & !contains("agree") & !contains("neutral") & !contains("active") & !contains("positive") & !contains("uncodable") & !contains("withdraw") & !contains("offtask") & !contains("nonauto"), ~ifelse(grepl("reject", ., ignore.case = TRUE), 1, 0), .names="reject_{col}")
       )
     
     #get a list of coder initials and list of codes
@@ -296,20 +294,14 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
     codes <- c("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
     
     #create empty dfs to hold the kappas and base rates
-    kappas <- data.frame(matrix(NA, nrow=length(coders),ncol=length(codes)))
+    kappas <- data.frame(matrix(NA, nrow=length(coders), ncol=1))
     base_rates_coders <- data.frame(matrix(NA, nrow=length(coders), ncol=length(codes))) 
     
     #calculate kappas and base rates for each coder and code, put in df
     for (j in 1:length(codes)){
       for (k in 1:length(coders)) {
         if (codes[j] != "total") { #for all codes except total...
-          dum_col_name = str_c(codes[j], coders[k], sep="_") #coder dummy code column name e.g., neutral_MA_code
-          cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
-          kappas[k , j] <- kappa2(cbind(merged_dfs[[i]][[cons_col_name]], merged_dfs[[i]][[dum_col_name]]))$value # Calculate kappa, add new variable to data
-          colnames(kappas)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
-          rownames(kappas)[k] <- paste0(str_c(coders[k], "agree", sep="_")) #name the row "MA_code_agree"
-          
-          #calculate base rates for each coder
+          #calculate base rates for each coder and code
           code_rate_coder = str_c(codes[j], coders[k], sep="_")
           coder_codes = coders[k]
           base_rates_coders[k, j] = sum(merged_dfs[[i]][[code_rate_coder]], na.rm=T)/sum(!is.na(merged_dfs[[i]][[coder_codes]]))
@@ -319,8 +311,9 @@ create_kappa_baserates_dfs <- function(merged_dfs) {
         else { #do a different procedure for total
           coder_col_name = coders[k] #coder code variable
           cons_col_init_name = "Consensus Code" #consensus code
-          kappas[k , j] <- kappa2(cbind(merged_dfs[[i]][[cons_col_init_name]], merged_dfs[[i]][[coder_col_name]]))$value #calculate total kappa, add new variable 
-          colnames(kappas)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
+          # calculate total kappa
+          kappas[k , 1] <- kappa2(cbind(merged_dfs[[i]][[cons_col_init_name]], merged_dfs[[i]][[coder_col_name]]))$value #calculate total kappa, add new variable 
+          colnames(kappas)[1] <- paste0(str_c("kappa", "total", sep="_")) #name the column "Kappa_total"
           rownames(kappas)[k] <- paste0(str_c(coders[k], "agree", sep="_")) #name the row "MA_code_agree"
         }
       }
@@ -360,12 +353,12 @@ create_kappa_baserates_dfs(merged_dfs)
 #NOTE: NAs mean that either consensus code or coder had no instances of the code
 ```
 
-## Calculate kappa across all coders for each participant
+## Calculate total kappa across all coders for each participant
 ```{r}
 create_kappa_allcoder_dfs <- function(merged_dfs) {
   list_name_kappa_allc <- "kappa_allcoder_dfs"
   list_kappa_allc <- list()
-  codes <- c("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
+
   for (i in 1:length(merged_dfs)) {
     kappa_allcoders_df_name <- str_c(names(merged_dfs)[i], "_kappas_allcoders", sep="")
     #get list of 'newest' code columns to calculate across
@@ -379,44 +372,13 @@ create_kappa_allcoder_dfs <- function(merged_dfs) {
     #rename the new variables to be more initiutive
     names(kappas_allcoders_df) <- c("Time", "Consensus Code", "coder", "code")
     
-    #each kappa code: add to that df the columns you created with 0 and 1 for each code above
-    #("neutral", "active", "positive", "uncodable", "withdraw", "offtask", "nonauto", "reject", "total")
-    kappas_allcoders_df <- mutate(kappas_allcoders_df,
-          neutral_code = ifelse(grepl("neutral", code, ignore.case=T), 1, 0),
-          neutral_consens = ifelse(grepl("neutral", `Consensus Code`, ignore.case=T), 1, 0),
-          active_code = ifelse(grepl("active", code, ignore.case=T), 1, 0),
-          active_consens = ifelse(grepl("active", `Consensus Code`, ignore.case=T), 1, 0),
-          positive_consens = ifelse(grepl("positive", `Consensus Code`, ignore.case=T), 1, 0),
-          positive_code = ifelse(grepl("positive", code, ignore.case=T), 1, 0),
-          uncodable_consens = ifelse(grepl("uncodable", `Consensus Code`, ignore.case=T), 1, 0),
-          uncodable_code = ifelse(grepl("uncodable", code, ignore.case=T), 1, 0),
-          withdraw_consens = ifelse(grepl("withdraw", `Consensus Code`, ignore.case=T), 1, 0),
-          withdraw_code = ifelse(grepl("withdraw", code, ignore.case=T), 1, 0),
-          offtask_consens = ifelse(grepl("off", `Consensus Code`, ignore.case=T), 1, 0),
-          offtask_code = ifelse(grepl("off", code, ignore.case=T), 1, 0),
-          nonauto_consens = ifelse(grepl("auto", `Consensus Code`, ignore.case=T), 1, 0),
-          nonauto_code = ifelse(grepl("auto", code, ignore.case=T), 1, 0),
-          reject_consens = ifelse(grepl("reject", `Consensus Code`, ignore.case=T), 1, 0),
-          reject_code = ifelse(grepl("reject", code, ignore.case=T), 1, 0)
-          )
-    
     #create an empty df to hold the kappas
-    kappas_allcoders <- data.frame(matrix(NA, nrow=1,ncol=length(codes)))
+    kappas_allcoders <- data.frame(matrix(NA, nrow=1,ncol=1))
     rownames(kappas_allcoders) <- "all_coders"
     
-    #calculate kappas for each coder and code, put in df
-      for (j in 1:length(codes)){
-        if (codes[j] != "total") { #for all codes except total kappa...
-          dum_col_name = str_c(codes[j], "code", sep="_") #coder dummy code column name e.g., neutral_code
-          cons_col_name = str_c(codes[j], "consens", sep="_") #consensus code dummy code column name, e.g., neutral_consens
-          kappas_allcoders[1, j] <- kappa2(cbind(kappas_allcoders_df[[cons_col_name]], kappas_allcoders_df[[dum_col_name]]))$value # Calculate kappa, add new variable to data
-          colnames(kappas_allcoders)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "kappa_neutral
-          }
-        else { #do a different procedure for total kappa
-          kappas_allcoders[1 , j] <- kappa2(cbind(kappas_allcoders_df[["Consensus Code"]], kappas_allcoders_df[["code"]]))$value #calculate total kappa, add new variable 
-          colnames(kappas_allcoders)[j] <- paste0(str_c("kappa", codes[j], sep="_")) #name the column "Kappa_total"
-        }
-      }
+    #calculate total kappa, put in df
+          kappas_allcoders[1 , 1] <- kappa2(cbind(kappas_allcoders_df[["Consensus Code"]], kappas_allcoders_df[["code"]]))$value #calculate total kappa, add new variable 
+          colnames(kappas_allcoders)[1] <- paste0(str_c("kappa", "total", sep="_")) #name the column "Kappa_total"
     #create 'coder' first column
     kappas_allcoders <- rownames_to_column(kappas_allcoders, var = "coder")
     #assign the kappa all coder df to the list
@@ -430,6 +392,7 @@ create_kappa_allcoder_dfs <- function(merged_dfs) {
 #apply the function
 create_kappa_allcoder_dfs(merged_dfs)
 ```
+
 
 ## Merge kappas and % agreement dfs for each participant
 NOTE: order of the dfs in each list is the same because the original list used to create them (merged_dfs) is the same across both
@@ -453,7 +416,6 @@ lapply(1:length(indiv_dfs), function(i) write.csv(indiv_dfs[[i]],
                                       file = paste0(str_c(path, sub("_%agree", "", names(indiv_dfs)[i]), "_summary.csv", sep="")), #call participantid_parent/child_summary
                                       row.names = FALSE))
 ```
-
 
 # Create summary file for each coder aggregated across participants
 
@@ -498,14 +460,16 @@ code_df <- mega_df %>%
 #change the columns
 #remove the NA row
 code_df <- code_df %>% filter(!is.na(cons_codes_consol))
-# first remember the new column names
+# first remember the new column names and row names 
 names <- str_c(code_df$cons_codes_consol, "%agree", sep="_")
+coders_code_df <- colnames(code_df)[-1]
 # transpose all but the first column (names)
 code_df_t <- as.data.frame(t(code_df[,-1]))
 colnames(code_df_t) <- names #assign the column names, "code_%agree"
 rownames(code_df_t) <- gsub('.{11}$', '', rownames(code_df_t)) #NEED TO CHANGE THIS TO BE REMOVE LAST X CHARACTERS
 #name the first coder column 
 code_df_t <- rownames_to_column(code_df_t, var = "coder")
+code_df_t[1] <- coders_code_df
 
 #get a list of coder initials
 #select variables that end with code and have the first letter uppercase
@@ -552,6 +516,10 @@ base_rates <- as.data.frame(table(mega_df$cons_codes_consol)) %>%
 names <- c("active", "neutral", "nonauto", "offtask", "positive", "reject", "uncodable", "withdraw") #ordered alphabetically 
 # transpose all but the first column (names)
 base_rates_t <- as.data.frame(t(base_rates[,-1]))
+
+#FIXED UP TO HERE FOR NEW ROUND OF BEHAIVOR CERTIFICATION
+#need to fix the below because the number of non-zero codes is less than total 
+
 colnames(base_rates_t) <- str_c("baserate", names, sep="_") #assign the column names, "baserate_code"
 #get rid of the Freq row
 #base_rates_t <- base_rates_t[-1, ]
@@ -701,5 +669,10 @@ path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cer
 
 #write the summary file csv
 write_csv(np_summary, str_c(path, "number_participants.csv"))
+```
+
+# Calculate reliability (total kappa only) for all possible pairs of coders
+```{r}
+
 ```
 
