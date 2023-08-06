@@ -455,7 +455,7 @@ mega_df <- mega_df %>%
 #calculate percent agreement by code (same formula as in individual dfs)
 code_df <- mega_df %>% 
       group_by(cons_codes_consol) %>% 
-      summarise(across(contains("_agree"), ~sum(., na.rm=T)/sum(!is.na(.)), .names="{col}")) %>% 
+      summarise(across(contains("_agree"), ~sum(., na.rm=T)/sum(!is.na(.)), .names="{sub('_code_agree', '', col)}")) %>% 
       as.data.frame()
 #change the columns
 #remove the NA row
@@ -702,7 +702,7 @@ calc_reliability_certification <- function(merged_dfs) {
 }
 
 #apply the function
-calc_reliability_certification(merged_dfs) 
+calc_reliability_certification(merged_dfs) #try this again when MA's NA values have been removed 
 ```
 
 ## Write reliability for all pairs of coders to file
