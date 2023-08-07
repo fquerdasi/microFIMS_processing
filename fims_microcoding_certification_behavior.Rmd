@@ -81,10 +81,16 @@ assign(list_name, list, envir=.GlobalEnv)
 read_coder_files(fl)
 ```
 
-# Change coder codes to be all lowercase
+# Change all codes to be  lowercase
 ```{r}
+# coder codes
 for (df_name in names(coder_dfs)) {
   coder_dfs[[df_name]] <- mutate(coder_dfs[[df_name]], across(contains("_code"), ~str_to_lower(.), .names="{col}"))
+}
+
+# consensus codes
+for (df_name in names(cons_codes)) {
+  cons_codes[[df_name]] <- mutate(cons_codes[[df_name]], `Consensus Code` = str_to_lower(`Consensus Code`))
 }
 ```
 
