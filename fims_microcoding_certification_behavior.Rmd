@@ -729,7 +729,7 @@ calc_reliability_certification(merged_dfs) #try this again when MA's NA values h
 path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_behavior/"
 
 lapply(1:length(reliability_certification), function(i) write.csv(reliability_certification[[i]], 
-                                      file = paste0(str_c(path, names(reliability_certification)[i])), # call MBB074_reliability
+                                      file = paste0(str_c(path, names(reliability_certification)[i]), ".csv"), # call MBB074_reliability
                                       row.names = FALSE))
 ```
 
