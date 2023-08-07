@@ -81,6 +81,14 @@ assign(list_name, list, envir=.GlobalEnv)
 read_coder_files(fl)
 ```
 
+# Change coder codes to be all lowercase
+```{r}
+for (df_name in names(coder_dfs)) {
+  coder_dfs[[df_name]] <- mutate(coder_dfs[[df_name]], across(contains("_code"), ~str_to_lower(.), .names="{col}"))
+}
+```
+
+
 # Merge the consensus codes with the coders' codes into the same df
 NOTE: if you run the for function more than once, will get weird errors
 ```{r}
@@ -138,6 +146,11 @@ MB_agree etc
 ```{r}
 #remove the null entries in the list (from files that were not read in)
 merged_dfs = merged_dfs[-which(sapply(merged_dfs, is.null))]
+
+# change codes to all lower case
+for (i in 1:length(merged_dfs)) {
+  colnames(merged_dfs[[i]])[which(str_detect(colnames(merged_dfs[[i]]), "[A-Z]_code$"))]
+}
 
 #make all the consensus code variables character (they will automatically be, but to avoid the loop below from erroring when some are not filled in currently)
 for (i in 1:length(merged_dfs)) {
