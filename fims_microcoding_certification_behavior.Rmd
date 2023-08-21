@@ -81,6 +81,22 @@ assign(list_name, list, envir=.GlobalEnv)
 read_coder_files(fl)
 ```
 
+# Take only the most recently modified versions of each coder/participant
+Note: still working on this part, so commented out for now
+```{r}
+# test <- data.frame("df_names" = names(coder_dfs), "mtime" = file.info(fl)$mtime)
+# 
+# unique_files <- test %>% 
+#   group_by(df_names) %>% 
+#   slice(which.max(mtime))
+# 
+# for (i in 1:length(coder_dfs)) {
+#   if (names(coder_dfs)[i] == names(coder_dfs)[i-1]) { #if two coder df names are the same...
+# 
+#   }
+```
+
+
 # Change all codes to be  lowercase
 ```{r}
 # coder codes
