@@ -681,7 +681,7 @@ np_summary<- np_summary %>%
 
 ## Write number of participants file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_behavior"
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_behavior/"
 
 #write the summary file csv
 write_csv(np_summary, str_c(path, "number_participants.csv"))
@@ -697,6 +697,7 @@ calc_reliability_certification <- function(merged_dfs) {
   list <- list()
   for (i in 1:length(merged_dfs)) {
     #create the final df name
+    if (ncol(merged_dfs[[i]]) > 8) { #for all merged dfs where there is more than 1 coder
     final_df_name <- str_c(names(merged_dfs)[i], "_reliability", sep="")
     
     #get list of coder columns
@@ -734,6 +735,7 @@ calc_reliability_certification <- function(merged_dfs) {
   }
   #assign the completed list to the global environment
   assign(list_name, list, envir=.GlobalEnv)
+  }
 }
 
 #apply the function
