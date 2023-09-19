@@ -28,6 +28,31 @@ suppressPackageStartupMessages({
 })
 ```
 
+## Archive any old files from the prior week into a new folder called the date that the all_summary file was last modified
+Running the rest of the script will otherwise overrwrite the files that are loose in the behavior_certification directory
+```{r}
+# default folder name will be the date that the all_summary file was generated; need to manually specify other folder name if you want 
+output_path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_behavior"
+
+summary_file <- list.files(path=output_path, pattern="all_summary", recursive=FALSE, full.names=TRUE)
+
+mod_time <- file.info(summary_file)$ctime
+mod_date <- gsub(" .*$", "", mod_time) # a space, then any char (.) any number of times (*) until end of string ($)
+
+# create the directory for old files
+dir.create(str_c(output_path, "/", mod_date, sep=""))
+
+# get a list of all files in main behavior folder
+beh_output <- list.files(output_path, pattern=".csv")
+
+# move all of the files currently in the main behavior folder to the new directory
+file.copy(from=file.path(output_path, beh_output), to=str_c(output_path, "/", mod_date, sep=""))
+
+# remove all of the files from the main directory that you just copied
+file.remove(file.path(output_path, beh_output))
+```
+
+
 ## Load data
 For certification, during Spring 2023 behavior will be certified. 
 ```{r}
