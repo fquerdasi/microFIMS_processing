@@ -39,17 +39,20 @@ summary_file <- list.files(path=output_path, pattern="all_summary", recursive=FA
 mod_time <- file.info(summary_file)$ctime
 mod_date <- gsub(" .*$", "", mod_time) # a space, then any char (.) any number of times (*) until end of string ($)
 
-# create the directory for old files
-dir.create(str_c(output_path, "/", mod_date, sep=""))
+if (length(mod_time) != 0) { # if there are in fact files loose in the main folder
 
-# get a list of all files in main behavior folder
-beh_output <- list.files(output_path, pattern=".csv")
-
-# move all of the files currently in the main behavior folder to the new directory
-file.copy(from=file.path(output_path, beh_output), to=str_c(output_path, "/", mod_date, sep=""))
-
-# remove all of the files from the main directory that you just copied
-file.remove(file.path(output_path, beh_output))
+  # create the directory for old files
+  dir.create(str_c(output_path, "/", mod_date, sep=""))
+  
+  # get a list of all files in main behavior folder
+  beh_output <- list.files(output_path, pattern=".csv")
+  
+  # move all of the files currently in the main behavior folder to the new directory
+  file.copy(from=file.path(output_path, beh_output), to=str_c(output_path, "/", mod_date, sep=""))
+  
+  # remove all of the files from the main directory that you just copied
+  file.remove(file.path(output_path, beh_output))
+}
 ```
 
 
@@ -124,6 +127,10 @@ Note: still working on this part, so commented out for now
 
 # Change all codes to be  lowercase
 ```{r}
+#remove the null and na entries in the list (from files that were not read in)
+# coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
+# coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+
 # coder codes
 for (df_name in names(coder_dfs)) {
   coder_dfs[[df_name]] <- mutate(coder_dfs[[df_name]], across(contains("_code"), ~str_to_lower(.), .names="{col}"))
@@ -139,10 +146,6 @@ for (df_name in names(cons_codes)) {
 # Merge the consensus codes with the coders' codes into the same df
 NOTE: if you run the for function more than once, will get weird errors
 ```{r}
-#remove the null and na entries in the list (from files that were not read in)
-#coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
-#coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
-
 #change the time variable to be double in all dfs
 for (i in 1:length(coder_dfs)) {
   if (is.character(coder_dfs[[i]]$Time)) { #if the time variable is a character...
