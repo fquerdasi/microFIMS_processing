@@ -25,9 +25,35 @@ suppressPackageStartupMessages({
 })
 ```
 
+## Archive any old files from the prior week into a new folder called the date that the all_summary file was last modified
+Running the rest of the script will otherwise overrwrite the files that are loose in the behavior_certification directory
+```{r}
+# default folder name will be the date that the all_summary file was generated; need to manually specify other folder name if you want 
+output_path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior"
+
+summary_file <- list.files(path=output_path, pattern="all_summary", recursive=FALSE, full.names=TRUE)
+
+mod_time <- file.info(summary_file)$ctime
+mod_date <- gsub(" .*$", "", mod_time) # a space, then any char (.) any number of times (*) until end of string ($)
+
+if (length(mod_time) != 0) { # if there are in fact files loose in the main folder
+
+  # create the directory for old files
+  dir.create(str_c(output_path, "/", mod_date, sep=""))
+  
+  # get a list of all files in main behavior folder
+  beh_output <- list.files(output_path, pattern=".csv")
+  
+  # move all of the files currently in the main behavior folder to the new directory
+  file.copy(from=file.path(output_path, beh_output), to=str_c(output_path, "/", mod_date, sep=""))
+  
+  # remove all of the files from the main directory that you just copied
+  file.remove(file.path(output_path, beh_output))
+}
+```
+
 ## Load data
-For reliability, during Winter 2023 only affect codes will be tested, and only one interaction will be coded for each participant. 
-Week 8 of Spring started piloting behavior certification codes. 
+Behavior reliability started rolling out in Fall 2023. 
 
 ```{r}
 reliability_codes <- "../../../../Lab/Video_coding_fims_micro/fims_micro" #overall directory where all of the codes
@@ -134,13 +160,13 @@ for (df_name in names(merged_dfs)) {
   merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], coders_agree := case_when(
       #if the string is found in the coder code and consensus code, variable is 1
       grepl("neutral", get(coders[1]), ignore.case=TRUE) & grepl("neutral", get(coders[2]), ignore.case=TRUE) ~ 1, 
-      grepl("pressures", get(coders[1]), ignore.case=TRUE) & grepl("pressures", get(coders[2]), ignore.case=TRUE) ~ 1,
-      grepl("disengaged", get(coders[1]), ignore.case=TRUE) & grepl("disengaged", get(coders[2]), ignore.case=TRUE) ~ 1,
-      grepl("requests", get(coders[1]), ignore.case=TRUE) & grepl("requests", get(coders[2]), ignore.case=TRUE) ~ 1,
-      grepl("warm", get(coders[1]), ignore.case=TRUE) & grepl("warm", get(coders[2]), ignore.case=TRUE) ~ 1,
-      grepl("auto", get(coders[1]), ignore.case=TRUE) & grepl("auto", get(coders[2]), ignore.case=TRUE) ~ 1,
-      grepl("explanation", get(coders[1]), ignore.case=TRUE) & grepl("explanation", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("active", get(coders[1]), ignore.case=TRUE) & grepl("active", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("positive", get(coders[1]), ignore.case=TRUE) & grepl("positive", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("withdraw", get(coders[1]), ignore.case=TRUE) & grepl("withdraw", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("off", get(coders[1]), ignore.case=TRUE) & grepl("off", get(coders[2]), ignore.case=TRUE) ~ 1,
       grepl("uncodable", get(coders[1]), ignore.case=TRUE) & grepl("uncodable", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("auto", get(coders[1]), ignore.case=TRUE) & grepl("auto", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("reject", get(coders[1]), ignore.case=TRUE) & grepl("reject", get(coders[2]), ignore.case=TRUE) ~ 1,
       is.na(get(coders[1])) | is.na(get(coders[2])) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
       TRUE ~ 0 #otherwise if none of the above are met, value is 0
   ), 
@@ -174,13 +200,13 @@ coders <- colnames(merged_dfs[[df_name]])[which(str_detect(colnames(merged_dfs[[
 #create binary 'did the coder indicate this code' for each code
 merged_dfs[[df_name]] <- mutate(merged_dfs[[df_name]], 
    across(ends_with("_code"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("pressures", .), 1, 0), .names="pressures_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("disengaged", .), 1, 0), .names="disengaged_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("requests", .), 1, 0), .names="requests_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("warm", .), 1, 0), .names="warm_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("auto", .), 1, 0), .names="auto_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("explanation", .), 1, 0), .names="explan_{sub('_code', '', col)}"),
-   across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}")
+   across(ends_with("_code"), ~ifelse(grepl("active", .), 1, 0), .names="active_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("off", .), 1, 0), .names="offtask_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("reject", .), 1, 0), .names="reject_{sub('_code', '', col)}")
 ) 
 }
 
@@ -199,7 +225,7 @@ calc_reliability_participant <- function(merged_dfs) {
     
     #get list of coder columns and codes
     coders <- colnames(merged_dfs[[names(merged_dfs)[i]]])[which(str_detect(colnames(merged_dfs[[names(merged_dfs)[i]]]), "_code$"))] 
-    codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total")
+    codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total")
     
     #create empty dfs to percent agreements
     participant_summary_df <- data.frame(matrix(NA, nrow=5, ncol=length(codes))) #rows will be "perc_agree", "presence_agree", "kappa", "baserate_c1", "baserate_c2"
@@ -340,7 +366,7 @@ children <- mega_df %>% dplyr::filter(Participant=="Child") %>% dplyr::select(wh
 all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
 child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
 parent_coders <- colnames(parents)[which(str_detect(colnames(parents), "_code$"))] 
-codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total")
+codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total")
 
 #create empty dfs to percent agreements
 all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+3), ncol=length(codes))) #+3 rows for kappa_allcoders, presence_agree_allcoders and percent_agree_allcoders
@@ -400,7 +426,6 @@ child_summary_df[length(child_coders)+1, ] <- colMeans(child_summary_df, na.rm=T
 rownames(parent_summary_df)[length(parent_coders)+1] <- "averge_base_rate"
 rownames(child_summary_df)[length(child_coders)+1] <- "averge_base_rate"
 ```
-STOPPED HERE FOR EDITING FOR BEHAVIOR
 
 # Create summary child and parent files with 1 row per participant
 Child summary and parent summary
@@ -415,7 +440,7 @@ child_dfs <- merged_dfs[grepl("child",names(merged_dfs))]
 parent_dfs <- merged_dfs[grepl("parent",names(merged_dfs))]
 
 calc_reliability_each_p_1row <- function(child_dfs) {
-  codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total") 
+  codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total") 
   #create parent and child dfs with 1 row for each participant
   child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*5)+6))) #6 = total pc agree and kappa, seconds coded and coder for 1 and 2
   #parent_summary_df_1row <- data.frame(matrix(NA, nrow=length(parent_dfs), ncol=(length(codes)*3)-1))
@@ -622,7 +647,7 @@ calc_reliability_coderpair <- function(coder_dfs) {
     
     #get list of coder columns and codes
     coders <- colnames(coder_dfs[[names(coder_dfs)[i]]])[which(str_detect(colnames(coder_dfs[[names(coder_dfs)[i]]]), "_code$"))] 
-    codes <- c("neutral", "pressures", "disengaged", "requests", "warm", "auto", "explanation", "uncodable", "total")
+    codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total")
     
     #create empty dfs to percent agreements
     coderpair_summary_df <- data.frame(matrix(NA, nrow=5, ncol=length(codes))) #rows will be "perc_agree", "presence_agree", "kappa", "baserate_c1", "baserate_c2"
