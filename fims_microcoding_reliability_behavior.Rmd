@@ -101,6 +101,18 @@ assign(list_name, list, envir=.GlobalEnv)
 read_reliability_files(fl)
 ```
 
+# Change all codes to be  lowercase
+```{r}
+#remove the null and na entries in the list (from files that were not read in)
+# coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
+# coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+
+for (df_name in names(reliability_dfs)) {
+  reliability_dfs[[df_name]] <- mutate(reliability_dfs[[df_name]], across(contains("_code"), ~str_to_lower(.), .names="{col}"))
+}
+```
+
+
 # Merge reliability files by participant
 ```{r}
 #filter out "" entries that got fed in somehow 
@@ -335,8 +347,8 @@ split_coder_dfs <- function(mega_df) {
         Time, 
         relative_time,
         coders_agree,
-        contains(sub("_code", "", all_coders[coder_pairs[1, p]])),
-        contains(sub("_code", "", all_coders[coder_pairs[2, p]]))
+        contains(sub("_code", "", all_coders[coder_pairs[1, p]]), ignore.case=FALSE),
+        contains(sub("_code", "", all_coders[coder_pairs[2, p]]), ignore.case=FALSE)
       )
       df_name <- paste0(str_c(sub("_code", "", all_coders[coder_pairs[1, p]]), sub("_code", "", all_coders[coder_pairs[2, p]]), "codes", sep="_"))
       coder_dfs[[p]] <-  df 
@@ -349,7 +361,7 @@ split_coder_dfs <- function(mega_df) {
 split_coder_dfs(mega_df)
 
 #remove the 'null' entries in the list
-#coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
+coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
 ```
 
 ## Subset mega_df into parent and child participants
@@ -362,7 +374,7 @@ children <- mega_df %>% dplyr::filter(Participant=="Child") %>% dplyr::select(wh
 
 ## Calculate the statistics
 ### Calculate base rates for each coder across all coderpairs and participants, and within all parent and all child files
-```{r}
+```{r, eval=FALSE}
 #get list of all coders
 all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
 child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
@@ -711,19 +723,20 @@ coderpairs_summary <- bind_rows(coderpair_sum_dfs)
 
 ### Calculate reliability across all coders and participants
 NOTE: cannot calculate all kappa the same as for the certification script becuase we have a bunch of coder pairs rather than a bunch of coders compared against consensus codes
+NOTE: for now, if any percent agree, etc. are NA for a coder pair, remove that coder pair from the mean calc (na.rm=TRUE) instead of having the mean be NA
 ```{r}
 #calculate reliability
 for (j in 1:length(codes)){
   #kappa_allcoders for each code can be calculated as the average kappa across all coder pairs
-  all_summary_df[length(all_coders)+1, j] = mean(coderpairs_summary[grepl("kappa", coderpairs_summary$statistic), j+1])
+  all_summary_df[length(all_coders)+1, j] = mean(coderpairs_summary[grepl("kappa", coderpairs_summary$statistic), j+1], na.rm=TRUE)
   rownames(all_summary_df)[length(all_coders)+1] = "kappa_allcoders"
   
   #percent agreement as average of percent agreement across all coder pairs
-  all_summary_df[length(all_coders)+2, j] = mean(coderpairs_summary[grepl("percent", coderpairs_summary$statistic), j+1])
+  all_summary_df[length(all_coders)+2, j] = mean(coderpairs_summary[grepl("percent", coderpairs_summary$statistic), j+1], na.rm=TRUE)
   rownames(all_summary_df)[length(all_coders)+2] = "percent_agree_allcoders"
   
   #presence agreement as average of presence agreement across all coder pairs
-  all_summary_df[length(all_coders)+3, j] = mean(coderpairs_summary[grepl("presence", coderpairs_summary$statistic), j+1])
+  all_summary_df[length(all_coders)+3, j] = mean(coderpairs_summary[grepl("presence", coderpairs_summary$statistic), j+1], na.rm=TRUE)
   rownames(all_summary_df)[length(all_coders)+3] = "presence_agree_allcoders"
 }
 
