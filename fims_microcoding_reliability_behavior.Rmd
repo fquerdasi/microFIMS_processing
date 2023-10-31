@@ -1,5 +1,5 @@
 ---
-title: "fims_microcoding_reliability"
+title: "fims_microcoding_reliability -- behavior"
 author: "Fran Querdasi"
 date: "2023-02-09"
 output: html_document
@@ -104,8 +104,8 @@ read_reliability_files(fl)
 # Change all codes to be  lowercase
 ```{r}
 #remove the null and na entries in the list (from files that were not read in)
-# coder_dfs = coder_dfs[-which(sapply(coder_dfs, is.null))]
-# coder_dfs = coder_dfs[-which(sapply(names(coder_dfs), is.na))]
+reliability_dfs = reliability_dfs[-which(sapply(reliability_dfs, is.null))]
+# reliability_dfs = reliability_dfs[-which(sapply(names(reliability_dfs), is.na))]
 
 for (df_name in names(reliability_dfs)) {
   reliability_dfs[[df_name]] <- mutate(reliability_dfs[[df_name]], across(contains("_code"), ~str_to_lower(.), .names="{col}"))
@@ -374,7 +374,7 @@ children <- mega_df %>% dplyr::filter(Participant=="Child") %>% dplyr::select(wh
 
 ## Calculate the statistics
 ### Calculate base rates for each coder across all coderpairs and participants, and within all parent and all child files
-```{r, eval=FALSE}
+```{r}
 #get list of all coders
 all_coders <- colnames(mega_df)[which(str_detect(colnames(mega_df), "_code$"))] 
 child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"))] 
