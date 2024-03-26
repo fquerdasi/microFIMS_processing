@@ -381,7 +381,7 @@ child_coders <- colnames(children)[which(str_detect(colnames(children), "_code$"
 parent_coders <- colnames(parents)[which(str_detect(colnames(parents), "_code$"))] 
 codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total")
 
-#create empty dfs to percent agreements
+#create empty dfs for statistics
 all_summary_df <- data.frame(matrix(NA, nrow=(length(all_coders)+3), ncol=length(codes))) #+3 rows for kappa_allcoders, presence_agree_allcoders and percent_agree_allcoders
 parent_summary_df <- data.frame(matrix(NA, nrow=(length(parent_coders)+3), ncol=length(codes)))
 child_summary_df <- data.frame(matrix(NA, nrow=(length(child_coders)+3), ncol=length(codes)))
@@ -403,7 +403,7 @@ for (j in 1:length(codes)){
 for (j in 1:length(codes)){
   for (k in 1:length(parent_coders)){
     if (codes[j] != "total") { #for all codes except total...
-    #base rates for each coder and code
+    #base rates for each coder and code with denominator being all seconds
       coder_code_col <- str_c(codes[j], sub("_code", "", parent_coders[k]), sep="_")
       parent_summary_df[k, j] = sum(parents[[coder_code_col]], na.rm=T)/sum(!is.na(parents[[coder_code_col]]))
       rownames(parent_summary_df)[k] <- paste0(str_c("baserate", sub("_code", "", parent_coders[k]), sep="_"))
@@ -443,7 +443,7 @@ the empty rows will be filled in chunk 18 (not done w that tho)
 
 # Create summary child and parent files with 1 row per participant
 Child summary and parent summary
-
+TEST OUT RUNNING CHUNK BELOW WITH CHANGES YOU FINISHED IMPLEMENTING
 ```{r}
 #subset merged_dfs into child dfs and parent dfs
 child_dfs <- merged_dfs[grepl("child",names(merged_dfs))]
@@ -452,8 +452,8 @@ parent_dfs <- merged_dfs[grepl("parent",names(merged_dfs))]
 calc_reliability_each_p_1row <- function(child_dfs) {
   codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total") 
   #create parent and child dfs with 1 row for each participant
-  child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*5)+6))) #6 = total pc agree and kappa, seconds coded and coder for 1 and 2
-  # 5 = percent_agree, prescence agree, kappa, baserate coder 1, baserate coder 2 -- for each code 
+  child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*7)+6))) #6 = total pc agree and kappa, seconds coded and coder for 1 and 2
+  # 7 = percent_agree, prescence agree, kappa, baserate coder 1, baserate coder 2, baserate_codable coder 1, baserate_codable coder 2 -- for each code 
   #parent_summary_df_1row <- data.frame(matrix(NA, nrow=length(parent_dfs), ncol=(length(codes)*3)-1))
   
   # has neutral, active, positive, withdraw, offtask, uncondable, reject (missing percent_agree), NOT nonauto
@@ -468,52 +468,58 @@ calc_reliability_each_p_1row <- function(child_dfs) {
         if (codes[j] != "total") { #for all codes except total...
           coder1_col_name = str_c(codes[j], sub("_code", "", coders[1]), sep="_") #coder1 dummy code column name e.g., neutral_MA
           coder2_col_name = str_c(codes[j], sub("_code", "", coders[2]), sep="_") #coder2 dummy code column name neutral_CB
-          #percent agreement (column numbers are 1, 6, 11, etc.)
-          child_summary_df_1row[i, (1+((j-1)*5))] = (sum(apply(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]==1, 1, all)) + sum(apply(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]==0, 1, all)))/sum(apply(!is.na(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]), 1, all))
-          colnames(child_summary_df_1row)[(1+((j-1)*5))] <- paste0(str_c(codes[j], "_percent_agree", sep="")) #
+          #percent agreement (column numbers are 1, 8, 15, etc.)
+          child_summary_df_1row[i, (1+((j-1)*7))] = (sum(apply(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]==1, 1, all)) + sum(apply(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]==0, 1, all)))/sum(apply(!is.na(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]), 1, all))
+          colnames(child_summary_df_1row)[(1+((j-1)*7))] <- paste0(str_c(codes[j], "_percent_agree", sep="")) #
           rownames(child_summary_df_1row)[i] <- names(child_dfs[i]) #
             
-          #presence agreement (column numbers are 2, 7, 12, etc.)
-          child_summary_df_1row[i, (2 + (5*(j-1)))] = (sum(apply(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]==1, 1, all)))/sum(child_dfs[[i]][, coder1_col_name] == 1 | child_dfs[[i]][, coder2_col_name] == 1, na.rm=T) #total number of times both cols are 1 divided by nrows with any instances of that code
-          colnames(child_summary_df_1row)[(2 + (5*(j-1)))] <- paste0(str_c(codes[j], "_prescence_agree", sep="")) #
+          #presence agreement (column numbers are 2, 9, 16, etc.)
+          child_summary_df_1row[i, (2 + (7*(j-1)))] = (sum(apply(child_dfs[[i]][,startsWith(colnames(child_dfs[[i]]), codes[j])]==1, 1, all)))/sum(child_dfs[[i]][, coder1_col_name] == 1 | child_dfs[[i]][, coder2_col_name] == 1, na.rm=T) #total number of times both cols are 1 divided by nrows with any instances of that code
+          colnames(child_summary_df_1row)[(2 + (7*(j-1)))] <- paste0(str_c(codes[j], "_prescence_agree", sep="")) #
           rownames(child_summary_df_1row)[i] <- names(child_dfs[i]) #
           
-          #kappas (column numbers are 3, 8, 9, 13, etc)
-          child_summary_df_1row[i, (3 + (5*(j-1)))] = kappa2(cbind(child_dfs[[i]][[coder1_col_name]], child_dfs[[i]][[coder2_col_name]]))$value
-          colnames(child_summary_df_1row)[(3 + (5*(j-1)))] <- paste0(str_c(codes[j], "_kappa", sep=""))
+          #kappas (column numbers are 3, 10, 17, etc)
+          child_summary_df_1row[i, (3 + (7*(j-1)))] = kappa2(cbind(child_dfs[[i]][[coder1_col_name]], child_dfs[[i]][[coder2_col_name]]))$value
+          colnames(child_summary_df_1row)[(3 + (7*(j-1)))] <- paste0(str_c(codes[j], "_kappa", sep=""))
           rownames(child_summary_df_1row)[i] <- names(child_dfs[i]) #
           
-          #base rates for each coder and code
-          child_summary_df_1row[i, (4 + (5*(j-1)))] = sum(child_dfs[[i]][[coder1_col_name]], na.rm=T)/sum(!is.na(child_dfs[[i]][[coder1_col_name]]))
-          colnames(child_summary_df_1row)[(4 + (5*(j-1)))] <- paste0(str_c("baserate", codes[j], "coder1", sep="_"))
-          child_summary_df_1row[i, (5*(j))] = sum(child_dfs[[i]][[coder2_col_name]], na.rm=T)/sum(!is.na(child_dfs[[i]][[coder2_col_name]]))
-          colnames(child_summary_df_1row)[(5*(j))] <- paste0(str_c("baserate", codes[j], "coder2", sep="_"))
-          }
-     
+          #base rates for each coder and code (column numbers are 4, 5, 11, 12, etc.)
+          child_summary_df_1row[i, (4 + (7*(j-1)))] = sum(child_dfs[[i]][[coder1_col_name]], na.rm=T)/sum(!is.na(child_dfs[[i]][[coder1_col_name]]))
+          colnames(child_summary_df_1row)[(4 + (7*(j-1)))] <- paste0(str_c("baserate", codes[j], "coder1", sep="_"))
+          child_summary_df_1row[i, (5 + (7*(j-1)))] = sum(child_dfs[[i]][[coder2_col_name]], na.rm=T)/sum(!is.na(child_dfs[[i]][[coder2_col_name]]))
+          colnames(child_summary_df_1row)[(5 + (7*(j-1)))] <- paste0(str_c("baserate", codes[j], "coder2", sep="_"))
+
+        # base rates for each coder and code with denominator being all codable seconds (the 'uncodable' var will be useless) (column numbers are 6, 7, 13, 14, etc.)
+        # sum of the base rate column for that coder, divided by sum of zeros in uncodable for that coder
+          child_summary_df_1row[i, (6 + (7*(j-1)))] = sum(child_dfs[[i]][[coder1_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", sub("_code", "", coders[1]), sep="_")]]==0)
+          colnames(child_summary_df_1row)[(6 + (7*(j-1)))] <- paste0(str_c("baserate_codable", codes[j], "coder1", sep="_"))
+          child_summary_df_1row[i, (7 + (7*(j-1)))] = sum(child_dfs[[i]][[coder2_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", sub("_code", "", coders[2]), sep="_")]]==0)
+          colnames(child_summary_df_1row)[(7 + (7*(j-1)))] <- paste0(str_c("baserate_codable", codes[j], "coder2", sep="_"))
+        }
         else { #do a different procedure for total
           #percent agreement
           overall_agree_col <- "coders_agree"
-          child_summary_df_1row[i, 41] = sum(child_dfs[[i]][[overall_agree_col]], na.rm=T)/sum(!is.na(child_dfs[[i]][[overall_agree_col]]))
-          colnames(child_summary_df_1row)[41] <- paste0(str_c(codes[j], "_percent_agree", sep=""))
+          child_summary_df_1row[i, 57] = sum(child_dfs[[i]][[overall_agree_col]], na.rm=T)/sum(!is.na(child_dfs[[i]][[overall_agree_col]]))
+          colnames(child_summary_df_1row)[57] <- paste0(str_c(codes[j], "_percent_agree", sep=""))
           rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
           
           #total kappa
-          child_summary_df_1row[i , 42] <- kappa2(cbind(child_dfs[[i]][[coders[1]]], child_dfs[[i]][[coders[2]]]))$value #calculate total kappa, add new variable 
-          colnames(child_summary_df_1row)[42] <- paste0(str_c(codes[j], "_kappa", sep=""))
+          child_summary_df_1row[i , 58] <- kappa2(cbind(child_dfs[[i]][[coders[1]]], child_dfs[[i]][[coders[2]]]))$value #calculate total kappa, add new variable 
+          colnames(child_summary_df_1row)[58] <- paste0(str_c(codes[j], "_kappa", sep=""))
           rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
         }
     }
     #add columns for number of seconds coded by each coder
-    child_summary_df_1row[i, 43] = sum(!is.na(child_dfs[[i]][[coders[1]]]))
-    colnames(child_summary_df_1row)[43] <- "seconds_coded_coder1"
-    child_summary_df_1row[i, 44] = sum(!is.na(child_dfs[[i]][[coders[1]]]))
-    colnames(child_summary_df_1row)[44] <- "seconds_coded_coder2" 
+    child_summary_df_1row[i, 59] = sum(!is.na(child_dfs[[i]][[coders[1]]]))
+    colnames(child_summary_df_1row)[59] <- "seconds_coded_coder1"
+    child_summary_df_1row[i, 60] = sum(!is.na(child_dfs[[i]][[coders[1]]]))
+    colnames(child_summary_df_1row)[60] <- "seconds_coded_coder2" 
     
     #add columns for who is coder 1 and coder2
-    child_summary_df_1row[i, 45] = paste0(sub("_code", "", coders[1]))
-    colnames(child_summary_df_1row)[45] <- "coder1"
-    child_summary_df_1row[i, 46] = paste0(sub("_code", "", coders[2]))
-    colnames(child_summary_df_1row)[46] <- "coder2" 
+    child_summary_df_1row[i, 61] = paste0(sub("_code", "", coders[1]))
+    colnames(child_summary_df_1row)[61] <- "coder1"
+    child_summary_df_1row[i, 62] = paste0(sub("_code", "", coders[2]))
+    colnames(child_summary_df_1row)[62] <- "coder2" 
   }
   #create 'coder' first column
   child_summary_df_1row <- rownames_to_column(child_summary_df_1row, var = "participant")
