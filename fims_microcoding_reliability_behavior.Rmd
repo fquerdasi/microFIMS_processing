@@ -115,7 +115,7 @@ for (df_name in names(reliability_dfs)) {
 
 # Merge reliability files by participant
 ```{r}
-#filter out "" entries that got fed in somehow 
+#filter out "" entries that got fed in  
 reliability_dfs <- reliability_dfs[which(names(reliability_dfs)!="")]
 
 #change the time variable to be double in all dfs

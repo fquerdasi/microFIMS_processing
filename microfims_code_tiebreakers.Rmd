@@ -1,0 +1,269 @@
+---
+title: "microfims_tiebreaker_codes"
+output: html_document
+date: "2024-03-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+suppressPackageStartupMessages({
+  library(stringr)
+  library(stringi)
+  library(readxl) 
+  library(purrr)
+  library(lubridate)
+  library(irr) #for cohen's kappa
+  source("fims_microcoding_helper_functions.R")
+  library(reshape2)
+  library(tidyverse)
+})
+```
+
+## Get the filepaths
+Tiebreaker codes, original codes
+NOTE: As of 3/29, we are missing MBB_2_101 parent in the input list of files with tiebreaker folders
+```{r}
+reliability_codes <- "../../../../Lab/Video_coding_fims_micro/fims_micro" #overall directory where all of the codes
+
+#get all of the .txt files from within the overall directory
+fl <- list.files(path=reliability_codes, pattern = "*.txt", recursive=TRUE, full.names = TRUE) #this will output a list of the files
+
+# tiebreaker paths
+tiebreaker_paths <- fl[grepl("/tiebreaker/", fl)]
+
+# select the files in behavior folders
+fl <- fl[grepl("/fims_micro_behavior/", fl)]
+
+#get a list of empty files from df to exclude for reading in (otherwise r with throw an error)
+empty <- fl[file.size(fl) == 0L]
+
+# get the IDs from fl that match the tiebreaker videos
+part1_values <- unique(gsub(".*(MBB_\\d+_\\d+).*", "\\1", tiebreaker_paths))
+fl_tiebreakers <- fl[grep(paste(part1_values, collapse = "|"), fl)]
+
+# from those videos, get only the ones that need tiebreaker
+pattern1 <- ".*/MBB_2_002_.*"
+pattern2 <- ".*/MBB_2_018_.*_PARENT\\.txt"
+pattern3 <- ".*/MBB_2_047_.*_PARENT\\.txt"
+pattern4 <- ".*/MBB_2_048_.*_CHILD\\.txt"
+pattern5 <- ".*/MBB_2_071_.*_PARENT\\.txt"
+pattern6 <- ".*/MBB_2_104_.*_PARENT\\.txt"
+pattern7 <- ".*/MBB_2_173_.*_PARENT\\.txt"
+#pattern8 <- ".*/MBB_2_101_.*_PARENT\\.txt"
+
+fl_tiebreakers_final <- fl_tiebreakers[grep(paste(pattern1, pattern2, pattern3, pattern4, pattern5, pattern6, pattern7, sep = "|"), fl_tiebreakers)] 
+
+# combine the filepath lists
+paths_final <- c(tiebreaker_paths, fl_tiebreakers_final)
+
+#get a list of empty files from df to exclude for reading in (otherwise r with throw an error)
+empty <- paths_final[file.size(paths_final) == 0L]
+```
+
+## Read in files as list
+```{r}
+read_tiebreaker_files <- function(fl) {
+list_name <- "tiebreaker_dfs"
+list <- list()
+for (i in 1:length(fl)) { #for each file in the list
+    #get info to add to the dfs
+    id_file_name <- gsub(".*/(MBB_\\d+_\\d+)/.*", "\\1", fl[i]) #this is the participant id
+    coder_initials <- gsub(".*?_([A-Za-z]{2})(?=\\.|_|$).*", "\\1", fl[[i]], perl = TRUE) #extract two letters bounded by _ on left and either _ or . on right
+    #read the file into r, create column names
+    df <- read.table(fl[[i]], header=FALSE, fill=TRUE, sep="\t")
+    if (grepl("tiebreaker", fl[i])) {
+      colnames(df) <- c("Tier", "Participant", "Time", "tiebreak_code")
+    }
+    else {
+      colnames(df) <- c("Tier", "Participant", "Time", str_c(coder_initials, "_code")) #column names are Tier, Participant, Time, and <coder initials>_code
+    }
+    #set the df name to match the participant: <id_file_name>_<child|parent>
+    df_name <- str_c(id_file_name, "_", tolower(df$Participant[1]), "_", coder_initials) #need to add coder initials so that they're not all the same name
+    #assign df to the list
+    list[[i]] <- df 
+    names(list)[i] <- df_name
+  }
+#assign the list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+read_tiebreaker_files(paths_final)
+```
+
+# Clean the dfs in the list
+```{r}
+#change the time variable to be double in all dfs
+for (i in 1:length(tiebreaker_dfs)) {
+  if (is.character(tiebreaker_dfs[[i]]$Time)) { #if the time variable is a character...
+    reliability_dfs[[i]]$Time <- as.numeric(lubridate::hms(tiebreaker_dfs[[i]]$Time)) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+# change all of the codes to be lower case
+for (df_name in names(tiebreaker_dfs)) {
+  tiebreaker_dfs[[df_name]] <- dplyr::mutate(tiebreaker_dfs[[df_name]], across(contains("_code"), ~str_to_lower(.), .names="{col}"))
+}
+```
+
+# Merge the dfs by participant
+```{r}
+# assign each of the dfs in the list to the environment
+for (df_name in names(tiebreaker_dfs)) {
+  assign(df_name, tiebreaker_dfs[[df_name]], envir = .GlobalEnv)
+}
+
+# because there are only a few dfs, merge manually each one by participant
+MBB_2_002_child <- MBB_2_002_child_MA %>% left_join(MBB_2_002_child_SX, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_002_child_LL, by = c("Tier", "Participant", "Time"))
+
+MBB_2_002_parent <- MBB_2_002_parent_MA %>% left_join(MBB_2_002_parent_SX, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_002_parent_LL, by = c("Tier", "Participant", "Time"))
+
+MBB_2_018_parent <- MBB_2_018_parent_MA %>% left_join(MBB_2_018_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_018_parent_LL, by = c("Tier", "Participant", "Time"))
+
+MBB_2_047_parent <- MBB_2_047_parent_MA %>% left_join(MBB_2_047_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_047_parent_LL, by = c("Tier", "Participant", "Time"))
+
+MBB_2_048_child <- MBB_2_048_child_MA %>% left_join(MBB_2_048_child_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_048_child_LL, by = c("Tier", "Participant", "Time"))
+
+MBB_2_071_parent <- MBB_2_071_parent_MA %>% left_join(MBB_2_071_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_071_parent_SX, by = c("Tier", "Participant", "Time"))
+
+MBB_2_104_parent <- MBB_2_104_parent_MA %>% left_join(MBB_2_104_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_104_parent_LL, by = c("Tier", "Participant", "Time"))
+
+MBB_2_173_parent <- MBB_2_173_parent_MA %>% left_join(MBB_2_173_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_173_parent_LL, by = c("Tier", "Participant", "Time"))
+
+# MBB_2_101_parent
+
+# create merged list of tiebreaker files
+merged_tiebreakers <- list(MBB_2_002_child = MBB_2_002_child, MBB_2_002_parent = MBB_2_002_parent, MBB_2_018_parent = MBB_2_018_parent, MBB_2_047_parent = MBB_2_047_parent, MBB_2_048_child = MBB_2_048_child, MBB_2_071_parent = MBB_2_071_parent, MBB_2_104_parent = MBB_2_104_parent, MBB_2_173_parent = MBB_2_173_parent)
+```
+
+# Create the individual second agreement/disagreement files
+(1 for each participant_child/parent file) 
+coders_agree variable as well as relative time
+```{r}
+#create the variables (relative time, binary agree for each pair of coders)
+for (df_name in names(merged_tiebreakers)) {
+  #get column names that contain coders' codes
+  coders <- colnames(merged_tiebreakers[[df_name]])[grepl("_code", colnames(merged_tiebreakers[[df_name]])) & !grepl("tiebreak", colnames(merged_tiebreakers[[df_name]]))]
+  #create binary 1/0 agreement variable between each pair of coders
+  merged_tiebreakers[[df_name]] <- mutate(merged_tiebreakers[[df_name]], coders_agree := case_when(
+      #if the string is found in the coder code and consensus code, variable is 1
+      grepl("neutral", get(coders[1]), ignore.case=TRUE) & grepl("neutral", get(coders[2]), ignore.case=TRUE) ~ 1, 
+      grepl("active", get(coders[1]), ignore.case=TRUE) & grepl("active", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("positive", get(coders[1]), ignore.case=TRUE) & grepl("positive", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("withdraw", get(coders[1]), ignore.case=TRUE) & grepl("withdraw", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("off", get(coders[1]), ignore.case=TRUE) & grepl("off", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("uncodable", get(coders[1]), ignore.case=TRUE) & grepl("uncodable", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("auto", get(coders[1]), ignore.case=TRUE) & grepl("auto", get(coders[2]), ignore.case=TRUE) ~ 1,
+      grepl("reject", get(coders[1]), ignore.case=TRUE) & grepl("reject", get(coders[2]), ignore.case=TRUE) ~ 1,
+      is.na(get(coders[1])) | is.na(get(coders[2])) ~ NA_real_,  #if there is NA in either consensus code or coder code, value is NA
+      get(coders[1]) == "" | get(coders[2]) == "" ~ NA_real_, #if there are any white spaces, value is NA
+      TRUE ~ 0 #otherwise if none of the above are met, value is 0
+  ), 
+  relative_time = round(Time - Time[1], digits=0)) #relative time is Time minus initial time, rounded to nearest integer
+}
+```
+
+# Replace codes with the tiebreak code where coders disagree 
+```{r}
+for (df_name in names(merged_tiebreakers)) {
+  coders <- colnames(merged_tiebreakers[[df_name]])[grepl("_code", colnames(merged_tiebreakers[[df_name]])) & !grepl("tiebreak", colnames(merged_tiebreakers[[df_name]]))]
+  
+  merged_tiebreakers[[df_name]] <- mutate(merged_tiebreakers[[df_name]], final_codes := ifelse(
+    coders_agree==1, get(coders[1]), tiebreak_code)
+  )
+}
+```
+
+## Create binary columns for whether each coder indicated a specific code
+These will be used in percent agreement, base rates, and kappas
+% agreement for each code = if 1 in both columns OR if 0 in both columns --> add to number of agreements; if 1 and 0 --> number of disagreements
+Formula = agreements/(sum of all rows, both agreements and disagreements)
+
+```{r}
+for (df_name in names(merged_tiebreakers)) {
+#get column names that contain coders' codes
+#coders <- colnames(merged_tiebreakers[[df_name]])[which(str_detect(colnames(merged_tiebreakers[[df_name]]), "_code$"))]
+#create binary 'did the coder indicate this code' for each code
+merged_tiebreakers[[df_name]] <- mutate(merged_tiebreakers[[df_name]], 
+   across(final_codes, ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("active", .), 1, 0), .names="active_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("off", .), 1, 0), .names="offtask_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_{sub('_codes', '', col)}"),
+   across(final_codes, ~ifelse(grepl("reject", .), 1, 0), .names="reject_{sub('_codes', '', col)}")
+) 
+}
+
+```
+
+# Calculate the new base rates, 1 row per participant
+```{r}
+#subset merged_dfs into child dfs and parent dfs
+child_dfs <- merged_tiebreakers[grepl("child",names(merged_tiebreakers))]
+parent_dfs <- merged_tiebreakers[grepl("parent",names(merged_tiebreakers))]
+
+calc_reliability_each_p_1row <- function(child_dfs) {
+  codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total") 
+  #create parent and child dfs with 1 row for each participant
+  child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*2)))) 
+  # 2 = baserate tiebreak, baserate_codable tiebreak -- for each code 
+  #parent_summary_df_1row <- data.frame(matrix(NA, nrow=length(parent_dfs), ncol=(length(codes)*3)-1))
+  
+  # has neutral, active, positive, withdraw, offtask, uncondable, reject (missing percent_agree), NOT nonauto
+  
+  #fill in the child df... 
+  for (i in 1:length(child_dfs)) {
+    #get list of coder columns and codes
+    coders <- colnames(child_dfs[[names(child_dfs)[i]]])[which(str_detect(colnames(child_dfs[[names(child_dfs)[i]]]), "_code$"))] 
+    
+    #calculate reliability metrics (percent agreement, kappas, and base rates) put in df
+    for (j in 1:length(codes)){
+        if (codes[j] != "total") { #for all codes except total...
+          coder_col_name = str_c(codes[j], "final", sep="_") #coder1 dummy code column name e.g., neutral_final
+          
+          #base rates for each coder and code (column numbers are 4, 5, 11, 12, etc.)
+          child_summary_df_1row[i, (1+(2*(j-1)))] = sum(child_dfs[[i]][[coder_col_name]], na.rm=T)/sum(!is.na(child_dfs[[i]][[coder_col_name]]))
+          colnames(child_summary_df_1row)[(1 + (2*(j-1)))] <- paste0(str_c("baserate", codes[j], "final", sep="_"))
+
+        # base rates for each coder and code with denominator being all codable seconds (the 'uncodable' var will be useless) (column numbers are 6, 7, 13, 14, etc.)
+        # sum of the base rate column for that coder, divided by sum of zeros in uncodable for that coder
+          child_summary_df_1row[i, (2 + (2*(j-1)))] = sum(child_dfs[[i]][[coder_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", "final", sep="_")]]==0)
+          colnames(child_summary_df_1row)[(2 + (2*(j-1)))] <- paste0(str_c("baserate_codable", codes[j], "final", sep="_"))
+        }
+    }
+    rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
+  }
+  #create 'coder' first column
+  rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
+  child_summary_df_1row <- rownames_to_column(child_summary_df_1row, var = "participant")
+  df <-  child_summary_df_1row 
+  if (any(grepl("child", child_summary_df_1row$participant))) {
+    df_name <- "child_summary_df_1row_tiebreakers"} 
+  else {
+    df_name <- "parent_summary_df_1row_tiebreakers"}
+  #assign the completed list to the global environment
+  assign(df_name, df, envir=.GlobalEnv)
+}
+
+#apply the function
+calc_reliability_each_p_1row(child_dfs) 
+calc_reliability_each_p_1row(parent_dfs)
+
+```
+
+# Write outupt file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
+
+#write the summary file csv
+write_csv(child_summary_df_1row_tiebreakers, str_c(path, "child_summary_each_p_tiebreakers.csv"))
+write_csv(parent_summary_df_1row_tiebreakers, str_c(path, "parent_summary_each_p_tiebreakers.csv"))
+```
+

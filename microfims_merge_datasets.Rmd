@@ -1,0 +1,342 @@
+---
+title: "microfims_merge_datasets"
+output: html_document
+date: "2024-03-26"
+author: Fran Querdasi
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+## Load data
+Demographics, ID to secondary ID key, microFIMS, macroFIMS, CBCL w1, BDI w1, coders' data, microFIMS tiebreakers
+```{r}
+demo_microfims <- read_csv("../Wave_1/Data_scoring/demographics_parentproxy/demographics_clean_w1.csv") %>% dplyr::select(
+  participant_id,
+  family_id,
+  ELA_group_w1,
+  ELA_subgroup_str_w1,
+  child_age_years_w1,
+  child_sex_w1,
+  child_gender_w1,
+  child_race_w1,
+  primarycaregiver_race_w1,
+  secondarycaregiver_race_w1,
+  demographics_respondent_w1,
+  primary_caregiver_w1,
+  secondary_caregiver_w1,
+  respondent_gender_w1,
+  primary_caregiver_gender_w1,
+  secondary_caregiver_gender_w1
+)
+
+id_key <- read_csv("../../ID_drive/ID_MBB_secondary.csv") %>% dplyr::rename(participant_id = primary_id)
+
+microfims_child <- read_csv("../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/child_summary_each_p.csv")
+
+microfims_parent <- read_csv("../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/parent_summary_each_p.csv")
+
+cbcl_microfims <- read_csv("../Wave_1/Data_scoring/Cbcl/cbcl_dsm_mean_scores.csv")
+
+bdi_microfims <- read_csv("../Wave_1/Data_scoring/bdi_ii/bdi_scores_items_w1_20221031.csv") %>% dplyr::select(
+  participant_id:bdi_ii_parentselfreport_18
+)
+
+w1_inperson <- read_csv("../Wave_1/Data_clean/wave_1_in_person_data_clean.csv") %>% dplyr::select(participant_id) %>% dplyr::mutate(w1_inperson = 1)
+
+macrofims <- read_sav("../../../../Users/Jenn/APIM - revised w mental health/MBB FIMS final both tasks v7.sav") %>% dplyr::select(
+   participant_id,
+   involve_task_mother_positive:conflict_level_positive,
+   involve_task_mother_negative:conflict_level_negative
+   #maybe also a few calculated vars -- decided no:
+   #affect_child_positive:childposdiff
+)
+
+#coders_microfioms <- 
+
+# microfims tiebreakers
+tiebreak_microfims_child <- read_csv("../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/child_summary_each_p_tiebreakers.csv")
+
+tiebreak_microfims_parent <- read_csv("../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/parent_summary_each_p_tiebreakers.csv")
+```
+
+# Clean individual datasets
+## CBCL
+Replace mean scores with NA if >30% missing on each subscale
+```{r}
+# Find columns ending in "_row_means" and "_prcnt_complete"
+row_means_cols <- grep("_row_means$", names(cbcl_microfims), value = TRUE)
+prcnt_complete_cols <- grep("_prcnt_complete$", names(cbcl_microfims), value = TRUE)
+
+# Loop through each pair of columns
+for (i in 1:length(row_means_cols)) {
+  row_means_col <- row_means_cols[i]
+  prcnt_complete_col <- prcnt_complete_cols[grep(sub("_row_means$", "", row_means_col), prcnt_complete_cols)]
+  
+  # Replace values with NA where percentage complete is less than 70
+  cbcl_microfims[cbcl_microfims[[prcnt_complete_col]] < .7, row_means_col] <- NA
+}
+```
+
+## BDI
+Create mean scores and % complete with only original items 2-21
+```{r}
+#create dataset that is subset of vars to be counted
+bdi_vars_d <- 
+  bdi_microfims %>% 
+  select(bdi_ii_parentselfreport_2:bdi_ii_parentselfreport_18) 
+
+# create new vars
+bdi_microfims <- bdi_microfims %>% 
+  dplyr::mutate(
+    bdi_sum_w1 = rowSums(bdi_vars_d, na.rm=TRUE),
+    bdi_qs_answered = rowSums(!is.na(bdi_vars_d)),
+    bdi_mean_score_w1 = bdi_sum_w1/bdi_qs_answered,
+    bdi_pct_complete_w1 = bdi_qs_answered/20
+  )
+
+# if bdi pct complete < 70, change mean score to be NA
+bdi_microfims<- bdi_microfims %>% 
+  dplyr::mutate(
+    bdi_mean_score_w1 = ifelse(bdi_pct_complete_w1 < .7, NA, bdi_mean_score_w1)
+  )
+
+# remove vars we don't need
+bdi_microfims_clean <- bdi_microfims %>% dplyr::select(participant_id, bdi_mean_score_w1, bdi_pct_complete_w1)
+```
+
+## MicroFIMS
+add _child or _parent to columns in each dataset, remove _parent and _child from secondary id, rename 'participant' --> secondary_id
+create flag for low kappa and >50% uncodable
+Add secondary ID to ID key
+Add interaction: PSI
+Then merge the datasets
+```{r}
+# CHILD DATASET
+# remove columns that we don't care about (prescence_agree, kappa besides total)
+microfims_child_clean <- microfims_child %>% dplyr::select(
+  participant,
+  contains("percent_agree"),
+  contains("baserate"),
+  total_kappa,
+  coder1,
+  coder2
+)
+
+# add _child to all columns
+colnames(microfims_child_clean) <-  paste(colnames(microfims_child_clean), "child", sep="_")
+
+microfims_child_clean <- microfims_child_clean %>% 
+  rename(participant = participant_child)
+
+# remove _child from id
+microfims_child_clean$participant <- gsub("_child", "", microfims_child_clean$participant)
+
+# rename 'participant' to secondary_id, add interaction = PSI variable, merge with secondary ID key
+microfims_child_clean <- microfims_child_clean %>% 
+  dplyr::rename(secondary_id = participant) %>% 
+  dplyr::mutate(microfims_interaction = "PSI") %>% 
+  dplyr::left_join(id_key, by = "secondary_id") %>% 
+  dplyr::select(
+    participant_id,
+    secondary_id, 
+    everything()
+  )
+
+# create flags: low kappa, high % uncodable
+microfims_child_clean <- microfims_child_clean %>% 
+  dplyr::mutate(
+    low_kappa_flag_child = ifelse(total_kappa_child < 0.4, 1, 0),
+    high_uncodable_flag_child = ifelse(baserate_uncodable_coder1_child > .5 | baserate_uncodable_coder2_child > .5, 1, 0)
+  )
+
+# PARENTS DATASET
+microfims_parent_clean <- microfims_parent %>% dplyr::select(
+  participant,
+  contains("percent_agree"),
+  contains("baserate"),
+  total_kappa,
+  coder1,
+  coder2
+)
+
+# add _parent to all columns
+colnames(microfims_parent_clean) <-  paste(colnames(microfims_parent_clean), "parent", sep="_")
+
+microfims_parent_clean <- microfims_parent_clean %>% 
+  rename(participant = participant_parent)
+
+# remove _child from id
+microfims_parent_clean$participant <- gsub("_parent", "", microfims_parent_clean$participant)
+
+# rename 'participant' to secondary_id, merge with secondary ID key
+microfims_parent_clean <- microfims_parent_clean %>% 
+  dplyr::rename(secondary_id = participant) %>% 
+  dplyr::left_join(id_key, by = "secondary_id") %>% 
+  dplyr::select(
+    participant_id,
+    secondary_id, 
+    everything()
+  )
+
+microfims_parent_clean <- microfims_parent_clean %>% 
+  dplyr::mutate(
+    low_kappa_flag_parent = ifelse(total_kappa_parent < 0.4, 1, 0),
+    high_uncodable_flag_parent = ifelse(baserate_uncodable_coder1_parent > .5 | baserate_uncodable_coder2_parent > .5, 1, 0)
+  )
+
+# merge parent and child datasets
+microfims_clean <- microfims_child_clean %>% dplyr::full_join(microfims_parent_clean, by = c("participant_id", "secondary_id"))
+```
+
+### Add tiebreaker base rates
+```{r}
+# CHILD TIEBREAKERS
+# add _child to all columns
+colnames(tiebreak_microfims_child) <-  paste(colnames(tiebreak_microfims_child), "child", sep="_")
+
+tiebreak_microfims_child <- tiebreak_microfims_child %>% 
+  rename(participant = participant_child)
+
+# remove _child from id
+tiebreak_microfims_child$participant <- gsub("_child", "", tiebreak_microfims_child$participant)
+
+# rename 'participant' to secondary_id, add interaction = PSI variable, merge with secondary ID key
+tiebreak_microfims_child <- tiebreak_microfims_child %>% 
+  dplyr::rename(secondary_id = participant) %>% 
+  dplyr::left_join(id_key, by = "secondary_id") %>% 
+  dplyr::select(
+    participant_id,
+    secondary_id, 
+    everything()
+  )
+
+# PARENT TIEBREAKERS
+# add _parent to all columns
+colnames(tiebreak_microfims_parent) <-  paste(colnames(tiebreak_microfims_parent), "parent", sep="_")
+
+tiebreak_microfims_parent <- tiebreak_microfims_parent %>% 
+  rename(participant = participant_parent)
+
+# remove _parent from id
+tiebreak_microfims_parent$participant <- gsub("_parent", "", tiebreak_microfims_parent$participant)
+
+# rename 'participant' to secondary_id, merge with secondary ID key
+tiebreak_microfims_parent <- tiebreak_microfims_parent %>% 
+  dplyr::rename(secondary_id = participant) %>% 
+  dplyr::left_join(id_key, by = "secondary_id") %>% 
+  dplyr::select(
+    participant_id,
+    secondary_id, 
+    everything()
+  )
+
+# merge parent and child datasets
+tiebreak_microfims_clean <- tiebreak_microfims_parent %>% dplyr::full_join(tiebreak_microfims_child, by = c("participant_id", "secondary_id"))
+```
+
+## Demographics
+Add variable for W1 in person vs remote
+*may change this bc currently it just gives everyone 0 who didn't participate in in-person, even some people who didn't participate at all*
+```{r}
+# merge demographics with w1 inperson variable
+demo_microfims_clean <- demo_microfims %>% left_join(w1_inperson, by = "participant_id") %>% dplyr::mutate(
+  w1_inperson = ifelse(is.na(w1_inperson), 0, w1_inperson)
+)
+
+# remove demo person who isn't in sample
+demo_microfims_clean <- demo_microfims_clean %>% dplyr::filter(participant_id != "MBB434")
+```
+
+## Coders'
+TBD
+```{r}
+
+```
+
+# Merge the datasets
+## Reliability
+Demographics, all microfims, coders'
+use macrofims IDs as left join
+```{r}
+reliability_microfims <- macrofims %>% dplyr::select(participant_id) %>% dplyr::left_join(demo_microfims_clean, by = "participant_id") %>% dplyr::left_join(microfims_clean, by = "participant_id")
+#%>% dplyr::left_join(coders, by = "participant_id")
+```
+
+## Validity
+Demographics, microFIMS base rates, macrofims, cbcl, bdi
+```{r}
+# select only base rates from microfims
+microfims_validity <- microfims_clean %>% dplyr::select(participant_id, secondary_id, contains("baserate"), contains("flag")) %>% dplyr::filter(!is.na(participant_id))
+
+# randomly assign one coder to be 'master' for each video
+master_coder <- replicate(nrow(microfims_validity), sample(c("coder1", "coder2"), 1))
+
+# bind master coder column to rest of dataset
+microfims_validity <- cbind(microfims_validity, master_coder)
+
+# duplicate the base rates for the assigned master coder and call them "_master"
+# extract the substrings of the variables
+first_substring <- substrings <- unique(gsub("_coder[12].*", "", names(microfims_validity)[-1]))[2:17]
+second_substring <- unique(gsub(".*_coder[12]_", "", names(microfims_validity)[-1]))[2:3]
+
+#Loop over substrings and create corresponding "master" columns
+for (i in 1:nrow(microfims_validity)) {
+for (substring in first_substring) {
+  for (substring2 in second_substring) {
+  coder1_col <- paste0(substring, "_coder1_", substring2)
+  coder2_col <- paste0(substring, "_coder2_", substring2)
+  master_col <- paste0(substring, "_master_", substring2)
+  
+  microfims_validity[i, master_col] <- ifelse(microfims_validity$master_coder[i] == "coder1", microfims_validity[i, coder1_col], microfims_validity[i, coder2_col])
+  }
+}
+}
+
+# remove columns with coder1 and coder2, merge with tiebreaker base rates
+microfims_validity_merge <- microfims_validity %>% dplyr::select(-contains("coder1"), -contains("coder2")) %>% dplyr::left_join(tiebreak_microfims_clean, by = c("participant_id", "secondary_id"))
+
+# replace master base rates with tiebreakers for those with low kappa
+for (i in 1:nrow(microfims_validity_merge)) {
+for (substring in first_substring) {
+  for (substring2 in second_substring) {
+  master_col <- paste0(substring, "_master_", substring2)
+  final_col <- paste0(substring, "_final_", substring2)
+  low_kappa_flag_col <- paste0("low_kappa_flag_", substring2)
+  
+  microfims_validity_merge[i, master_col] <- ifelse(microfims_validity_merge[[low_kappa_flag_col]][i] == "1", microfims_validity_merge[i, final_col], microfims_validity_merge[i, master_col]) # need to finish this -- change master_code to "low_kappa_flag_child" or "low_kappa_flag_parent" 
+  }
+}
+}
+
+# merge the rest of the data
+validity_microfims <- macrofims %>% dplyr::select(participant_id) %>% dplyr::left_join(demo_microfims_clean, by = "participant_id") %>% dplyr::left_join(microfims_validity, by = "participant_id") %>% dplyr::left_join(macrofims, by = "participant_id") %>% dplyr::left_join(cbcl_microfims, by = "participant_id") %>% dplyr::left_join(bdi_microfims_clean, by = "participant_id")
+```
+
+# Output the datasets
+Consider where to output these files
+```{r}
+#write_csv(reliability_microfims, "microfims_reliability_data.csv")
+
+#write_csv(validity_microfims, "microfims_validity_data.csv")
+```
+
+# Investigate missing microfims
+```{r}
+# get secondary id
+macrofims_ids <- read_sav("../../../../Users/Jenn/APIM - revised w mental health/MBB FIMS final both tasks v7.sav") %>% dplyr::select(
+   participant_id,
+   secondary_id
+)
+
+microfims_missing_ids <- reliability_microfims %>% dplyr::filter(is.na(secondary_id)) %>% dplyr::select(participant_id) %>% dplyr::left_join(macrofims_ids, by = "participant_id")
+```
+
