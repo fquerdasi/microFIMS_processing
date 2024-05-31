@@ -54,9 +54,9 @@ pattern4 <- ".*/MBB_2_048_.*_CHILD\\.txt"
 pattern5 <- ".*/MBB_2_071_.*_PARENT\\.txt"
 pattern6 <- ".*/MBB_2_104_.*_PARENT\\.txt"
 pattern7 <- ".*/MBB_2_173_.*_PARENT\\.txt"
-#pattern8 <- ".*/MBB_2_101_.*_PARENT\\.txt"
+pattern8 <- ".*/MBB_2_101_.*_PARENT\\.txt"
 
-fl_tiebreakers_final <- fl_tiebreakers[grep(paste(pattern1, pattern2, pattern3, pattern4, pattern5, pattern6, pattern7, sep = "|"), fl_tiebreakers)] 
+fl_tiebreakers_final <- fl_tiebreakers[grep(paste(pattern1, pattern2, pattern3, pattern4, pattern5, pattern6, pattern7, pattern8, sep = "|"), fl_tiebreakers)] 
 
 # combine the filepath lists
 paths_final <- c(tiebreaker_paths, fl_tiebreakers_final)
@@ -119,9 +119,9 @@ for (df_name in names(tiebreaker_dfs)) {
 }
 
 # because there are only a few dfs, merge manually each one by participant
-MBB_2_002_child <- MBB_2_002_child_MA %>% left_join(MBB_2_002_child_SX, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_002_child_LL, by = c("Tier", "Participant", "Time"))
+MBB_2_002_child <- MBB_2_002_child_LL %>% left_join(MBB_2_002_child_SX, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_002_child_MA, by = c("Tier", "Participant", "Time"))
 
-MBB_2_002_parent <- MBB_2_002_parent_MA %>% left_join(MBB_2_002_parent_SX, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_002_parent_LL, by = c("Tier", "Participant", "Time"))
+MBB_2_002_parent <- MBB_2_002_parent_LL %>% left_join(MBB_2_002_parent_SX, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_002_parent_MA, by = c("Tier", "Participant", "Time"))
 
 MBB_2_018_parent <- MBB_2_018_parent_MA %>% left_join(MBB_2_018_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_018_parent_LL, by = c("Tier", "Participant", "Time"))
 
@@ -135,10 +135,10 @@ MBB_2_104_parent <- MBB_2_104_parent_MA %>% left_join(MBB_2_104_parent_CS, by = 
 
 MBB_2_173_parent <- MBB_2_173_parent_MA %>% left_join(MBB_2_173_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_173_parent_LL, by = c("Tier", "Participant", "Time"))
 
-# MBB_2_101_parent
+MBB_2_101_parent <- MBB_2_101_parent_SX %>% left_join(MBB_2_101_parent_CS, by = c("Tier", "Participant", "Time")) %>% left_join(MBB_2_101_parent_LL, by = c("Tier", "Participant", "Time"))
 
 # create merged list of tiebreaker files
-merged_tiebreakers <- list(MBB_2_002_child = MBB_2_002_child, MBB_2_002_parent = MBB_2_002_parent, MBB_2_018_parent = MBB_2_018_parent, MBB_2_047_parent = MBB_2_047_parent, MBB_2_048_child = MBB_2_048_child, MBB_2_071_parent = MBB_2_071_parent, MBB_2_104_parent = MBB_2_104_parent, MBB_2_173_parent = MBB_2_173_parent)
+merged_tiebreakers <- list(MBB_2_002_child = MBB_2_002_child, MBB_2_002_parent = MBB_2_002_parent, MBB_2_018_parent = MBB_2_018_parent, MBB_2_047_parent = MBB_2_047_parent, MBB_2_048_child = MBB_2_048_child, MBB_2_071_parent = MBB_2_071_parent, MBB_2_104_parent = MBB_2_104_parent, MBB_2_173_parent = MBB_2_173_parent, MBB_2_101_parent = MBB_2_101_parent)
 ```
 
 # Create the individual second agreement/disagreement files
@@ -174,9 +174,14 @@ for (df_name in names(merged_tiebreakers)) {
   coders <- colnames(merged_tiebreakers[[df_name]])[grepl("_code", colnames(merged_tiebreakers[[df_name]])) & !grepl("tiebreak", colnames(merged_tiebreakers[[df_name]]))]
   
   merged_tiebreakers[[df_name]] <- mutate(merged_tiebreakers[[df_name]], final_codes := ifelse(
-    coders_agree==1, get(coders[1]), tiebreak_code)
+    coders_agree==1 | is.na(coders_agree), get(coders[1]), tiebreak_code)
   )
 }
+
+# force the tiebreaker codes to replace for MBB002 (coders didn't have the same timing, we decided to just replace with all tiebreaker codes)
+
+merged_tiebreakers[["MBB_2_002_parent"]]$final_codes <- merged_tiebreakers[["MBB_2_002_parent"]]$tiebreak_code
+merged_tiebreakers[["MBB_2_002_child"]]$final_codes <- merged_tiebreakers[["MBB_2_002_child"]]$tiebreak_code
 ```
 
 ## Create binary columns for whether each coder indicated a specific code
@@ -235,7 +240,7 @@ calc_reliability_each_p_1row <- function(child_dfs) {
         # base rates for each coder and code with denominator being all codable seconds (the 'uncodable' var will be useless) (column numbers are 6, 7, 13, 14, etc.)
         # sum of the base rate column for that coder, divided by sum of zeros in uncodable for that coder
           child_summary_df_1row[i, (2 + (2*(j-1)))] = sum(child_dfs[[i]][[coder_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", "final", sep="_")]]==0)
-          colnames(child_summary_df_1row)[(2 + (2*(j-1)))] <- paste0(str_c("baserate_codable", codes[j], "final", sep="_"))
+          colnames(child_summary_df_1row)[(2 + (2*(j-1)))] <- paste0(str_c("proportion", codes[j], "final", sep="_"))
         }
     }
     rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
@@ -260,10 +265,20 @@ calc_reliability_each_p_1row(parent_dfs)
 
 # Write outupt file
 ```{r}
-path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/tiebreaker_data/" 
 
 #write the summary file csv
 write_csv(child_summary_df_1row_tiebreakers, str_c(path, "child_summary_each_p_tiebreakers.csv"))
 write_csv(parent_summary_df_1row_tiebreakers, str_c(path, "parent_summary_each_p_tiebreakers.csv"))
+```
+
+# Output second-by-second files
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/tiebreaker_data/" #path to write the files
+
+#for each entry in the merged_dfs list, write the entry as a .csv called "name_agreement.csv"
+lapply(1:length(merged_tiebreakers), function(i) write.csv(merged_tiebreakers[[i]], 
+                                      file = paste0(str_c(path, names(merged_tiebreakers)[i], "_tiebreaker_codes.csv", sep="")),
+                                      row.names = FALSE))
 ```
 

@@ -4,7 +4,7 @@ author: "Fran Querdasi"
 date: "2023-02-09"
 output: html_document
 ---
-NOTE: finished editing for behavior, neeed to test
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -127,8 +127,6 @@ for (i in 1:length(reliability_dfs)) {
 
 #get the names of all the dataframes
 reliability_df_names <- sort(names(reliability_dfs)) #names of the coder dfs
-
-#ISSUE WHERE PAIR AFTER LONE FILE DOESN'T GET READ IN -- not sure why this happened once and then re-run it worked
 
 #for all of the names_of_dfs, if cons_df_names contains the name, then full_join it with the df that contains it on Tier and Time
 merge_reliability_dfs <- function(reliability_dfs, reliability_df_names) {
@@ -453,7 +451,7 @@ calc_reliability_each_p_1row <- function(child_dfs) {
   codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total") 
   #create parent and child dfs with 1 row for each participant
   child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*7)+6))) #6 = total pc agree and kappa, seconds coded and coder for 1 and 2
-  # 7 = percent_agree, prescence agree, kappa, baserate coder 1, baserate coder 2, baserate_codable coder 1, baserate_codable coder 2 -- for each code 
+  # 7 = percent_agree, prescence agree, kappa, baserate coder 1, baserate coder 2, proportion coder 1, proportion coder 2 -- for each code 
   #parent_summary_df_1row <- data.frame(matrix(NA, nrow=length(parent_dfs), ncol=(length(codes)*3)-1))
   
   # has neutral, active, positive, withdraw, offtask, uncondable, reject (missing percent_agree), NOT nonauto
@@ -492,9 +490,9 @@ calc_reliability_each_p_1row <- function(child_dfs) {
         # base rates for each coder and code with denominator being all codable seconds (the 'uncodable' var will be useless) (column numbers are 6, 7, 13, 14, etc.)
         # sum of the base rate column for that coder, divided by sum of zeros in uncodable for that coder
           child_summary_df_1row[i, (6 + (7*(j-1)))] = sum(child_dfs[[i]][[coder1_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", sub("_code", "", coders[1]), sep="_")]]==0)
-          colnames(child_summary_df_1row)[(6 + (7*(j-1)))] <- paste0(str_c("baserate_codable", codes[j], "coder1", sep="_"))
+          colnames(child_summary_df_1row)[(6 + (7*(j-1)))] <- paste0(str_c("proportion", codes[j], "coder1", sep="_"))
           child_summary_df_1row[i, (7 + (7*(j-1)))] = sum(child_dfs[[i]][[coder2_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", sub("_code", "", coders[2]), sep="_")]]==0)
-          colnames(child_summary_df_1row)[(7 + (7*(j-1)))] <- paste0(str_c("baserate_codable", codes[j], "coder2", sep="_"))
+          colnames(child_summary_df_1row)[(7 + (7*(j-1)))] <- paste0(str_c("proportion", codes[j], "coder2", sep="_"))
         }
         else { #do a different procedure for total
           #percent agreement
@@ -576,6 +574,10 @@ parent_mean_row <- parent_mean_row %>%
 
 child_summary_df_1row_final <- rbind(child_summary_df_1row, child_mean_row)
 parent_summary_df_1row_final <- rbind(parent_summary_df_1row, parent_mean_row)
+
+# add _parent and _child to all variables in these two datasets (to make merging later easier)
+child_summary_df_1row_final <- child_summary_df_1row_final %>% dplyr::rename_with(., ~paste0(.x, "_child", sep = ""), !participant)
+parent_summary_df_1row_final <- parent_summary_df_1row_final %>% dplyr::rename_with(., ~paste0(.x, "_parent", sep = ""), !participant)
 ```
 
 ## Write child and parent summaries (1 row per participant)

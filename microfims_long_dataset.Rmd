@@ -1,0 +1,253 @@
+---
+title: "microfims_long_dataset"
+output: html_document
+date: "2024-04-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+## Load and clean each dataset
+Long format files for each participant for certification videos, tiebreaker videos, and all others
+Column that identifies randomly assigned master coder for videos that don't have tiebreakers and were not used in certification
+### Tiebreaker codes
+```{r}
+# read in the certification videos, tiebreaker videos, and all others: each as their own separate list
+
+# tiebreaker code directory
+tiebreak_codes <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/tiebreaker_data/"
+
+tiebreak_fl <- list.files(path=tiebreak_codes, pattern = "MBB_*", recursive=TRUE, full.names = TRUE)
+
+read_tiebreaker_files <- function(fl) {
+list_name <- "tiebreaker_code_dfs"
+list <- list()
+for (i in 1:length(fl)) { #for each file in the list
+    #get info to add to the dfs
+    id_file_name <- gsub(".*/(\\w+_(child|parent)).*", "\\1", fl[i]) #this is the participant id
+    #read the file into r, create column names
+    df <- read.table(fl[[i]], header=TRUE, fill=TRUE, sep=",")
+    #set the df name to match the participant: <id_file_name>_<child|parent>
+    df_name <- id_file_name
+    #assign df to the list
+    list[[i]] <- df 
+    names(list)[i] <- df_name
+  }
+#assign the list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+read_tiebreaker_files(tiebreak_fl)
+
+# get rid of extra columns and create secondary_id column
+for (df_name in names(tiebreaker_code_dfs)) {
+  #create secondary_id column
+  tiebreaker_code_dfs[[df_name]] <- dplyr::mutate(tiebreaker_code_dfs[[df_name]], secondary_id := names(tiebreaker_code_dfs[df_name]))
+  tiebreaker_code_dfs[[df_name]] <- dplyr::select(tiebreaker_code_dfs[[df_name]], secondary_id, contains("final"), relative_time)
+  tiebreaker_code_dfs[[df_name]] <- dplyr::rename_with(tiebreaker_code_dfs[[df_name]], .fn = ~gsub("final", "master", .), .cols = contains("final"))
+}
+```
+## Certification codes
+```{r}
+consensus_codes <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/MicroFIMS expert behavior codes.xlsx"
+
+#load data
+multiplesheets(consensus_codes, "cons_codes") #load the consensus codes as a list of dfs, each df is a id_parent or _child
+
+names_to_keep <- c("MBB_2_005_child", "MBB_2_005_parent", "MBB_2_036_child", "MBB_2_036_parent", "MBB_2_144_child", "MBB_2_144_parent")
+
+# select only the files we want
+certification_codes <- list()
+for (df_name in names(cons_codes)) {
+  if (df_name %in% names_to_keep) {
+    certification_codes[[df_name]] <- cons_codes[[df_name]]
+  }
+}
+
+#change the time variable to be double in all dfs
+for (i in 1:length(certification_codes)) {
+  if (is.character(certification_codes[[i]]$Time)) { #if the time variable is a character...
+    certification_codes[[i]]$Time <- as.numeric(lubridate::hms(certification_codes[[i]]$Time)) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+# change all of the codes to be lower case
+for (df_name in names(certification_codes)) {
+  certification_codes[[df_name]] <- dplyr::mutate(certification_codes[[df_name]], across(contains("Code"), ~str_to_lower(.), .names="{col}"))
+}
+
+# create the binary columns for each code
+for (df_name in names(certification_codes)) {
+#get column names that contain coders' codes
+#create binary 'did the coder indicate this code' for each code
+certification_codes[[df_name]] <- mutate(certification_codes[[df_name]], 
+   across(`Consensus Code`, ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_master"),
+   across(`Consensus Code`, ~ifelse(grepl("active", .), 1, 0), .names="active_master"),
+   across(`Consensus Code`, ~ifelse(grepl("positive", .), 1, 0), .names="positive_master"),
+   across(`Consensus Code`, ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_master"),
+   across(`Consensus Code`, ~ifelse(grepl("off", .), 1, 0), .names="offtask_master"),
+   across(`Consensus Code`, ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_master"),
+   across(`Consensus Code`, ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_master"),
+   across(`Consensus Code`, ~ifelse(grepl("reject", .), 1, 0), .names="reject_master")
+) 
+}
+
+# get rid of extra columns and create secondary_id column
+for (df_name in names(certification_codes)) {
+  # rename consensus code column to be 'master_codes'
+  certification_codes[[df_name]] <- dplyr::rename(certification_codes[[df_name]], master_codes = `Consensus Code`)
+  #create secondary_id column
+  certification_codes[[df_name]] <- dplyr::mutate(certification_codes[[df_name]], secondary_id := names(certification_codes[df_name]),
+                                           relative_time = round(Time - Time[1], digits=0))
+  certification_codes[[df_name]] <- dplyr::select(certification_codes[[df_name]], secondary_id, contains("master"), relative_time)
+  
+}
+```
+## Other participants
+```{r}
+# load the file with assignment for coder1 or coder2 to be master (validity dataset)
+coder_assignment <- read_csv("data/microfims_validity_final_data.csv") %>% dplyr::select(secondary_id, master_coder)
+
+# load rest of second-by-second code files
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
+
+general_fl <- list.files(path=path, pattern = "*_agreement.csv", recursive=FALSE, full.names = TRUE)
+
+read_general_files <- function(fl) {
+list_name <- "general_code_dfs"
+list <- list()
+for (i in 1:length(fl)) { #for each file in the list
+    #get info to add to the dfs
+    id_file_name <- gsub(".*/(\\w+_(child|parent)).*", "\\1", fl[i]) #this is the participant id
+    #read the file into r, create column names
+    df <- read.table(fl[[i]], header=TRUE, fill=TRUE, sep=",")
+    #set the df name to match the participant: <id_file_name>_<child|parent>
+    df_name <- id_file_name
+    #assign df to the list
+    list[[i]] <- df 
+    names(list)[i] <- df_name
+  }
+#assign the list to the global environment
+assign(list_name, list, envir=.GlobalEnv)
+}
+
+#apply the function
+read_general_files(general_fl)
+
+# create binary code columns for each coder
+for (df_name in names(general_code_dfs)) {
+#get column names that contain coders' codes
+coders <- colnames(general_code_dfs[[df_name]])[which(str_detect(colnames(general_code_dfs[[df_name]]), "_code$"))]
+#create binary 'did the coder indicate this code' for each code
+general_code_dfs[[df_name]] <- mutate(general_code_dfs[[df_name]], 
+   across(ends_with("_code"), ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("active", .), 1, 0), .names="active_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("positive", .), 1, 0), .names="positive_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("off", .), 1, 0), .names="offtask_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_{sub('_code', '', col)}"),
+   across(ends_with("_code"), ~ifelse(grepl("reject", .), 1, 0), .names="reject_{sub('_code', '', col)}")
+) 
+}
+
+# rename coder columns to sub coder1 and coder2 for the coder initials
+# coder1 is always the person with initials higher up the alphabet than coder 2
+for (df_name in names(general_code_dfs)) {
+  #create secondary_id column
+  general_code_dfs[[df_name]] <- mutate(general_code_dfs[[df_name]], secondary_id := names(general_code_dfs[df_name]))
+  # rename variables with <code>_<coder initials>
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("..$", "coder1", .), .cols = ends_with("MA") | ends_with("CS"))
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("..$", "coder2", .), .cols = ends_with("LL") | ends_with("SX"))
+  # same thing but rename the variables with <coder initials>_code
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("^..", "coder1", .), .cols = starts_with("MA") | starts_with("CS"))
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("^..", "coder2", .), .cols = starts_with("LL") | starts_with("SX"))
+  general_code_dfs[[df_name]] <- dplyr::select(general_code_dfs[[df_name]], secondary_id, contains("coder1"), contains("coder2"), relative_time)
+  
+}
+
+# rename the appropriate columns to be 'master' coder
+# match secondary_id (minus _child or _parent) to the key doc to determine which end string to change to 'master'
+for (df_name in names(general_code_dfs)) {
+  df_id <- gsub("_child|_parent", "", general_code_dfs[[df_name]]$secondary_id[1])
+  master_column <- as.character(coder_assignment[coder_assignment$secondary_id == df_id, "master_coder"])
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("_[^_]+$", "_master", .), .cols = ends_with(master_column))
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("coder[12]_", "master_", .), .cols = starts_with(master_column))
+}
+
+# drop the non-master codes
+for (df_name in names(general_code_dfs)) {
+  general_code_dfs[[df_name]] <- dplyr::select(general_code_dfs[[df_name]], secondary_id, contains("master"), relative_time)
+  general_code_dfs[[df_name]] <- dplyr::rename(general_code_dfs[[df_name]], master_codes = master_code)
+}
+
+# remove the participants who have tiebreaker data
+general_code_dfs_final <- general_code_dfs[!names(general_code_dfs) %in% names(tiebreaker_code_dfs)]
+```
+
+
+# Overall Cleaning
+## Combine the lists into one list now that they all share the same format
+```{r}
+all_code_dfs <- c(certification_codes, tiebreaker_code_dfs, general_code_dfs_final)
+```
+
+## Recode 'uncodable' seconds
+If a given second is rated as uncodable, we want all of the other code columns to be 'NA'
+```{r}
+# recode rest of columns to be 'na' for any second coded as 'uncodable' 
+for (df_name in names(all_code_dfs)) {
+  all_code_dfs[[df_name]] <- dplyr::mutate(all_code_dfs[[df_name]], across(ends_with("master") & !contains("uncodable"), ~ifelse(uncodable_master==1, NA, .)))
+}
+
+# remove uncodable column
+for (df_name in names(all_code_dfs)) {
+  all_code_dfs[[df_name]] <- dplyr::select(all_code_dfs[[df_name]], secondary_id, relative_time, contains("master") & !contains("uncodable"))
+}
+
+# weird that some of the dfs appear to show 10 columns in the list but then they actually have 9?? try merging and see if something weird happens
+```
+
+## Bind all of the dfs together into one df
+```{r}
+# bind rows all of the files together
+long_df <- bind_rows(all_code_dfs)
+
+#sum(long_df$secondary_id == "MBB_2_002_child")
+
+#write_csv(long_df, "microfims_long_df_testing.csv")
+```
+
+## Merge parent and child columns for each participant
+```{r}
+# add _child or _parent to new column
+long_df <- long_df %>% dplyr::mutate(dyad_member = sub(".*\\_", "", secondary_id))
+
+# remove _parent from id
+long_df$secondary_id <- gsub("_parent|_child", "", long_df$secondary_id)
+
+# remove the _child and _parent from the dfs, add to new column 
+
+# pivot wider
+long_df_wide <- long_df %>% pivot_wider(
+                         id_cols = c(secondary_id, relative_time),
+                         names_from = c(dyad_member),
+                         values_from = c(contains("master")),
+                         names_sep = "_")
+
+```
+
+# Write the output
+```{r}
+write_csv(long_df_wide, "data/microfims_long_dataset.csv")
+```
+

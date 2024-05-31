@@ -1,0 +1,142 @@
+---
+title: "microfims_baserates_certifvids"
+output: html_document
+date: "2024-03-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Load libraries
+```{r}
+suppressPackageStartupMessages({
+  library(stringr)
+  library(stringi)
+  library(readxl) 
+  library(purrr)
+  library(lubridate)
+  library(irr) #for cohen's kappa
+  source("fims_microcoding_helper_functions.R")
+  library(reshape2)
+  library(tidyverse)
+})
+```
+
+## Get the filepaths
+```{r}
+consensus_codes <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/MicroFIMS expert behavior codes.xlsx"
+
+#load data
+multiplesheets(consensus_codes, "cons_codes") #load the consensus codes as a list of dfs, each df is a id_parent or _child
+
+names_to_keep <- c("MBB_2_005_child", "MBB_2_005_parent", "MBB_2_036_child", "MBB_2_036_parent", "MBB_2_144_child", "MBB_2_144_parent")
+
+# select only the files we want
+filtered_dfs <- list()
+for (df_name in names(cons_codes)) {
+  if (df_name %in% names_to_keep) {
+    filtered_dfs[[df_name]] <- cons_codes[[df_name]]
+  }
+}
+```
+
+# clean
+```{r}
+#change the time variable to be double in all dfs
+for (i in 1:length(filtered_dfs)) {
+  if (is.character(filtered_dfs[[i]]$Time)) { #if the time variable is a character...
+    filtered_dfs[[i]]$Time <- as.numeric(lubridate::hms(tiebreaker_dfs[[i]]$Time)) #convert it to hh:mm:ss and then to numeric
+  }
+}
+
+# change all of the codes to be lower case
+for (df_name in names(filtered_dfs)) {
+  filtered_dfs[[df_name]] <- dplyr::mutate(filtered_dfs[[df_name]], across(contains("Code"), ~str_to_lower(.), .names="{col}"))
+}
+```
+
+
+# Create binary columns for whether consensus codes indicated a specific code
+
+```{r}
+for (df_name in names(filtered_dfs)) {
+#get column names that contain coders' codes
+#create binary 'did the coder indicate this code' for each code
+filtered_dfs[[df_name]] <- mutate(filtered_dfs[[df_name]], 
+   across(`Consensus Code`, ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("active", .), 1, 0), .names="active_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("positive", .), 1, 0), .names="positive_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("off", .), 1, 0), .names="offtask_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_cons"),
+   across(`Consensus Code`, ~ifelse(grepl("reject", .), 1, 0), .names="reject_cons")
+) 
+}
+```
+
+# Calculate the new base rates, 1 row per participant
+```{r}
+#subset merged_dfs into child dfs and parent dfs
+child_dfs <- filtered_dfs[grepl("child",names(filtered_dfs))]
+parent_dfs <- filtered_dfs[grepl("parent",names(filtered_dfs))]
+
+calc_baserates_each_p_1row <- function(child_dfs) {
+  codes <- c("neutral", "active", "positive", "withdraw", "offtask", "uncodable", "nonauto", "reject", "total") 
+  #create parent and child dfs with 1 row for each participant
+  child_summary_df_1row <-  data.frame(matrix(NA, nrow=length(child_dfs), ncol=(((length(codes)-1)*2)))) 
+  # 2 = baserate tiebreak, baserate_codable tiebreak -- for each code 
+  #parent_summary_df_1row <- data.frame(matrix(NA, nrow=length(parent_dfs), ncol=(length(codes)*3)-1))
+  
+  # has neutral, active, positive, withdraw, offtask, uncondable, reject (missing percent_agree), NOT nonauto
+  
+  #fill in the child df... 
+  for (i in 1:length(child_dfs)) {
+    #get list of coder columns and codes
+    #coders <- colnames(child_dfs[[names(child_dfs)[i]]])[which(str_detect(colnames(child_dfs[[names(child_dfs)[i]]]), "_code$"))] 
+    
+    #calculate reliability metrics (percent agreement, kappas, and base rates) put in df
+    for (j in 1:length(codes)){
+        if (codes[j] != "total") { #for all codes except total...
+          coder_col_name = str_c(codes[j], "cons", sep="_") #coder1 dummy code column name e.g., neutral_final
+          
+          #base rates for each coder and code (column numbers are 4, 5, 11, 12, etc.)
+          child_summary_df_1row[i, (1+(2*(j-1)))] = sum(child_dfs[[i]][[coder_col_name]], na.rm=T)/sum(!is.na(child_dfs[[i]][[coder_col_name]]))
+          colnames(child_summary_df_1row)[(1 + (2*(j-1)))] <- paste0(str_c("baserate", codes[j], "cons", sep="_"))
+
+        # base rates for each coder and code with denominator being all codable seconds (the 'uncodable' var will be useless) (column numbers are 6, 7, 13, 14, etc.)
+        # sum of the base rate column for that coder, divided by sum of zeros in uncodable for that coder
+          child_summary_df_1row[i, (2 + (2*(j-1)))] = sum(child_dfs[[i]][[coder_col_name]], na.rm=T)/sum(child_dfs[[i]][[str_c("uncodable", "cons", sep="_")]]==0)
+          colnames(child_summary_df_1row)[(2 + (2*(j-1)))] <- paste0(str_c("proportion", codes[j], "cons", sep="_"))
+        }
+    }
+    rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
+  }
+  #create 'coder' first column
+  rownames(child_summary_df_1row)[i] <- names(child_dfs[i])
+  child_summary_df_1row <- rownames_to_column(child_summary_df_1row, var = "participant")
+  df <-  child_summary_df_1row 
+  if (any(grepl("child", child_summary_df_1row$participant))) {
+    df_name <- "child_summary_df_1row_cons"} 
+  else {
+    df_name <- "parent_summary_df_1row_cons"}
+  #assign the completed list to the global environment
+  assign(df_name, df, envir=.GlobalEnv)
+}
+
+#apply the function
+calc_baserates_each_p_1row(child_dfs) 
+calc_baserates_each_p_1row(parent_dfs)
+
+```
+
+# Write outupt file
+```{r}
+path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_cerfication_data/microFIMS_certification_behavior/" 
+
+#write the summary file csv
+write_csv(child_summary_df_1row_cons, str_c(path, "child_baserates_cons_testing.csv"))
+write_csv(parent_summary_df_1row_cons, str_c(path, "parent_baserates_cons_testing.csv"))
+```
