@@ -17,7 +17,7 @@ library(haven)
 
 ## Load and clean each dataset
 Long format files for each participant for certification videos, tiebreaker videos, and all others
-Column that identifies randomly assigned master coder for videos that don't have tiebreakers and were not used in certification
+Column that identifies randomly assigned primary coder for videos that don't have tiebreakers and were not used in certification
 ### Tiebreaker codes
 ```{r}
 # read in the certification videos, tiebreaker videos, and all others: each as their own separate list
@@ -53,7 +53,7 @@ for (df_name in names(tiebreaker_code_dfs)) {
   #create secondary_id column
   tiebreaker_code_dfs[[df_name]] <- dplyr::mutate(tiebreaker_code_dfs[[df_name]], secondary_id := names(tiebreaker_code_dfs[df_name]))
   tiebreaker_code_dfs[[df_name]] <- dplyr::select(tiebreaker_code_dfs[[df_name]], secondary_id, contains("final"), relative_time)
-  tiebreaker_code_dfs[[df_name]] <- dplyr::rename_with(tiebreaker_code_dfs[[df_name]], .fn = ~gsub("final", "master", .), .cols = contains("final"))
+  tiebreaker_code_dfs[[df_name]] <- dplyr::rename_with(tiebreaker_code_dfs[[df_name]], .fn = ~gsub("final", "primary", .), .cols = contains("final"))
 }
 ```
 ## Certification codes
@@ -90,32 +90,32 @@ for (df_name in names(certification_codes)) {
 #get column names that contain coders' codes
 #create binary 'did the coder indicate this code' for each code
 certification_codes[[df_name]] <- mutate(certification_codes[[df_name]], 
-   across(`Consensus Code`, ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_master"),
-   across(`Consensus Code`, ~ifelse(grepl("active", .), 1, 0), .names="active_master"),
-   across(`Consensus Code`, ~ifelse(grepl("positive", .), 1, 0), .names="positive_master"),
-   across(`Consensus Code`, ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_master"),
-   across(`Consensus Code`, ~ifelse(grepl("off", .), 1, 0), .names="offtask_master"),
-   across(`Consensus Code`, ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_master"),
-   across(`Consensus Code`, ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_master"),
-   across(`Consensus Code`, ~ifelse(grepl("reject", .), 1, 0), .names="reject_master")
+   across(`Consensus Code`, ~ifelse(grepl("neutral", .), 1, 0), .names="neutral_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("active", .), 1, 0), .names="active_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("positive", .), 1, 0), .names="positive_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("withdraw", .), 1, 0), .names="withdraw_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("off", .), 1, 0), .names="offtask_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("uncodable", .), 1, 0), .names="uncodable_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("auto", .), 1, 0), .names="nonauto_primary"),
+   across(`Consensus Code`, ~ifelse(grepl("reject", .), 1, 0), .names="reject_primary")
 ) 
 }
 
 # get rid of extra columns and create secondary_id column
 for (df_name in names(certification_codes)) {
-  # rename consensus code column to be 'master_codes'
-  certification_codes[[df_name]] <- dplyr::rename(certification_codes[[df_name]], master_codes = `Consensus Code`)
+  # rename consensus code column to be 'primary_codes'
+  certification_codes[[df_name]] <- dplyr::rename(certification_codes[[df_name]], primary_codes = `Consensus Code`)
   #create secondary_id column
   certification_codes[[df_name]] <- dplyr::mutate(certification_codes[[df_name]], secondary_id := names(certification_codes[df_name]),
                                            relative_time = round(Time - Time[1], digits=0))
-  certification_codes[[df_name]] <- dplyr::select(certification_codes[[df_name]], secondary_id, contains("master"), relative_time)
+  certification_codes[[df_name]] <- dplyr::select(certification_codes[[df_name]], secondary_id, contains("primary"), relative_time)
   
 }
 ```
 ## Other participants
 ```{r}
-# load the file with assignment for coder1 or coder2 to be master (validity dataset)
-coder_assignment <- read_csv("data/microfims_validity_final_data.csv") %>% dplyr::select(secondary_id, master_coder)
+# load the file with assignment for coder1 or coder2 to be primary (validity dataset)
+coder_assignment <- read_csv("data/microfims_validity_final_data.csv") %>% dplyr::select(secondary_id, primary_coder)
 
 # load rest of second-by-second code files
 path <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/microFIMS_reliability_data/behavior/" 
@@ -175,19 +175,19 @@ for (df_name in names(general_code_dfs)) {
   
 }
 
-# rename the appropriate columns to be 'master' coder
-# match secondary_id (minus _child or _parent) to the key doc to determine which end string to change to 'master'
+# rename the appropriate columns to be 'primary' coder
+# match secondary_id (minus _child or _parent) to the key doc to determine which end string to change to 'primary'
 for (df_name in names(general_code_dfs)) {
   df_id <- gsub("_child|_parent", "", general_code_dfs[[df_name]]$secondary_id[1])
-  master_column <- as.character(coder_assignment[coder_assignment$secondary_id == df_id, "master_coder"])
-  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("_[^_]+$", "_master", .), .cols = ends_with(master_column))
-  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("coder[12]_", "master_", .), .cols = starts_with(master_column))
+  primary_column <- as.character(coder_assignment[coder_assignment$secondary_id == df_id, "primary_coder"])
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("_[^_]+$", "_primary", .), .cols = ends_with(primary_column))
+  general_code_dfs[[df_name]] <- rename_with(general_code_dfs[[df_name]],  ~gsub("coder[12]_", "primary_", .), .cols = starts_with(primary_column))
 }
 
-# drop the non-master codes
+# drop the non-primary codes
 for (df_name in names(general_code_dfs)) {
-  general_code_dfs[[df_name]] <- dplyr::select(general_code_dfs[[df_name]], secondary_id, contains("master"), relative_time)
-  general_code_dfs[[df_name]] <- dplyr::rename(general_code_dfs[[df_name]], master_codes = master_code)
+  general_code_dfs[[df_name]] <- dplyr::select(general_code_dfs[[df_name]], secondary_id, contains("primary"), relative_time)
+  general_code_dfs[[df_name]] <- dplyr::rename(general_code_dfs[[df_name]], primary_codes = primary_code)
 }
 
 # remove the participants who have tiebreaker data
@@ -206,12 +206,12 @@ If a given second is rated as uncodable, we want all of the other code columns t
 ```{r}
 # recode rest of columns to be 'na' for any second coded as 'uncodable' 
 for (df_name in names(all_code_dfs)) {
-  all_code_dfs[[df_name]] <- dplyr::mutate(all_code_dfs[[df_name]], across(ends_with("master") & !contains("uncodable"), ~ifelse(uncodable_master==1, NA, .)))
+  all_code_dfs[[df_name]] <- dplyr::mutate(all_code_dfs[[df_name]], across(ends_with("primary") & !contains("uncodable"), ~ifelse(uncodable_primary==1, NA, .)))
 }
 
 # remove uncodable column
 for (df_name in names(all_code_dfs)) {
-  all_code_dfs[[df_name]] <- dplyr::select(all_code_dfs[[df_name]], secondary_id, relative_time, contains("master") & !contains("uncodable"))
+  all_code_dfs[[df_name]] <- dplyr::select(all_code_dfs[[df_name]], secondary_id, relative_time, contains("primary") & !contains("uncodable"))
 }
 
 # weird that some of the dfs appear to show 10 columns in the list but then they actually have 9?? try merging and see if something weird happens
@@ -241,7 +241,7 @@ long_df$secondary_id <- gsub("_parent|_child", "", long_df$secondary_id)
 long_df_wide <- long_df %>% pivot_wider(
                          id_cols = c(secondary_id, relative_time),
                          names_from = c(dyad_member),
-                         values_from = c(contains("master")),
+                         values_from = c(contains("primary")),
                          names_sep = "_")
 
 ```

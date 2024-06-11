@@ -57,7 +57,6 @@ if (length(mod_time) != 0) { # if there are in fact files loose in the main fold
 
 
 ## Load data
-For certification, during Spring 2023 behavior will be certified. 
 ```{r}
 #get paths
 consensus_codes <- "../../FIMS/FIMS_micro_coding/MicroFIMS Core Team Training/MicroFIMS expert behavior codes.xlsx"
@@ -529,7 +528,7 @@ coders_code_df <- colnames(code_df)[-1]
 # transpose all but the first column (names)
 code_df_t <- as.data.frame(t(code_df[,-1]))
 colnames(code_df_t) <- names #assign the column names, "code_%agree"
-rownames(code_df_t) <- gsub('.{11}$', '', rownames(code_df_t)) #NEED TO CHANGE THIS TO BE REMOVE LAST X CHARACTERS
+rownames(code_df_t) <- gsub('.{11}$', '', rownames(code_df_t)) 
 #name the first coder column 
 code_df_t <- rownames_to_column(code_df_t, var = "coder")
 code_df_t[1] <- coders_code_df

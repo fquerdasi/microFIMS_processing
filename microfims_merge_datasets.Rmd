@@ -389,26 +389,26 @@ Demographics, microFIMS base rates, macrofims, cbcl, bdi, tesi
 # select only base rates from microfims
 microfims_validity <- microfims_clean %>% dplyr::select(participant_id, secondary_id, contains("proportion"), contains("kappa"), contains("flag")) %>% dplyr::filter(!is.na(participant_id))
 
-# randomly assign one coder to be 'master' for each video
-master_coder <- replicate(nrow(microfims_validity), sample(c("coder1", "coder2"), 1))
+# randomly assign one coder to be 'primary' for each video
+primary_coder <- replicate(nrow(microfims_validity), sample(c("coder1", "coder2"), 1))
 
-# bind master coder column to rest of dataset
-microfims_validity <- cbind(microfims_validity, master_coder)
+# bind primary coder column to rest of dataset
+microfims_validity <- cbind(microfims_validity, primary_coder)
 
-# duplicate the base rates for the assigned master coder and call them "_master" 
+# duplicate the base rates for the assigned primary coder and call them "_primary" 
 # extract the substrings of the variables
 first_substring <- substrings <- unique(gsub("_coder[12].*", "", names(microfims_validity)[-1]))[2:8]
 second_substring <- unique(gsub(".*_coder[12]_", "", names(microfims_validity)[-1]))[2:3]
 
-#Loop over substrings and create corresponding "master" columns
+#Loop over substrings and create corresponding "primary" columns
 for (i in 1:nrow(microfims_validity)) {
 for (substring in first_substring) {
   for (substring2 in second_substring) {
   coder1_col <- paste0(substring, "_coder1_", substring2)
   coder2_col <- paste0(substring, "_coder2_", substring2)
-  master_col <- paste0(substring, "_master_", substring2)
+  primary_col <- paste0(substring, "_primary_", substring2)
   
-  microfims_validity[i, master_col] <- ifelse(microfims_validity$master_coder[i] == "coder1", microfims_validity[i, coder1_col], microfims_validity[i, coder2_col])
+  microfims_validity[i, primary_col] <- ifelse(microfims_validity$primary_coder[i] == "coder1", microfims_validity[i, coder1_col], microfims_validity[i, coder2_col])
   }
 }
 }
@@ -416,15 +416,15 @@ for (substring in first_substring) {
 # remove columns with coder1 and coder2, merge with tiebreaker base rates
 microfims_validity_merge <- microfims_validity %>% dplyr::select(-contains("coder1"), -contains("coder2")) %>% dplyr::left_join(tiebreak_microfims_clean, by = c("participant_id", "secondary_id"))
 
-# replace master base rates with tiebreakers for those with low kappa
+# replace primary base rates with tiebreakers for those with low kappa
 for (i in 1:nrow(microfims_validity_merge)) {
 for (substring in first_substring) {
   for (substring2 in second_substring) {
-  master_col <- paste0(substring, "_master_", substring2)
+  primary_col <- paste0(substring, "_primary_", substring2)
   final_col <- paste0(substring, "_final_", substring2)
   low_kappa_flag_col <- paste0("low_kappa_flag_", substring2)
   
-  microfims_validity_merge[i, master_col] <- ifelse(microfims_validity_merge[[low_kappa_flag_col]][i] == "1", microfims_validity_merge[i, final_col], microfims_validity_merge[i, master_col]) 
+  microfims_validity_merge[i, primary_col] <- ifelse(microfims_validity_merge[[low_kappa_flag_col]][i] == "1", microfims_validity_merge[i, final_col], microfims_validity_merge[i, primary_col]) 
   }
 }
 }
@@ -440,14 +440,14 @@ validity_microfims <- validity_microfims %>% dplyr::mutate(
 # merge the consensus code columns
 validity_microfims <- validity_microfims %>% dplyr::left_join(cons_microfims_clean, by = "secondary_id")
 
-# replace the 'master' base rates with consesus code base rates...
+# replace the 'primary' base rates with consesus code base rates...
 for (i in 1:nrow(validity_microfims)) {
 for (substring in first_substring) {
   for (substring2 in second_substring) {
-  master_col <- paste0(substring, "_master_", substring2)
+  primary_col <- paste0(substring, "_primary_", substring2)
   cons_col <- paste0(substring, "_cons_", substring2)
   
-  validity_microfims[i, master_col] <- ifelse(validity_microfims[["use_certif_codes_flag"]][i] == "1", validity_microfims[i, cons_col], validity_microfims[i, master_col])  
+  validity_microfims[i, primary_col] <- ifelse(validity_microfims[["use_certif_codes_flag"]][i] == "1", validity_microfims[i, cons_col], validity_microfims[i, primary_col])  
   }
 }
 }
